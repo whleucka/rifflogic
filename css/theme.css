@@ -1,0 +1,47 @@
+:root {
+  /* Background — Tokyo Night Storm */
+  --bg-primary: #24283b;
+  --bg-secondary: #1f2335;
+  --bg-surface: #292e42;
+
+  /* Text */
+  --text-primary: #c0caf5;
+  --text-secondary: #a9b1d6;
+  --text-muted: #565f89;
+
+  /* Accents — Tokyo Night palette */
+  --accent-blue: #7aa2f7;
+  --accent-red: #f7768e;
+  --accent-gold: #e0af68;
+  --accent-green: #9ece6a;
+
+  /* Fretboard */
+  --fb-body: #1a1b26;
+  --fb-nut: #cfc9c2;
+  --fb-fret-wire: #565f89;
+  --fb-string: #e0af68;
+  --fb-marker: rgba(122, 162, 247, 0.06);
+  --fb-inlay: rgba(122, 162, 247, 0.12);
+
+  /* Note circle */
+  --note-bg: var(--accent-blue);
+  --note-text: #1a1b26;
+  --note-root: var(--accent-gold);
+  --note-highlight: var(--accent-red);
+
+  /* UI */
+  --border-color: rgba(169, 177, 214, 0.1);
+  --shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  --radius: 6px;
+  --transition: 0.15s ease;
+
+  /* Font */
+  --font-main: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Fira Code', 'Consolas', monospace;
+}
+
+body {
+  font-family: var(--font-main);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}

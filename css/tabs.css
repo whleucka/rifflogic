@@ -1,0 +1,103 @@
+/* Tab viewer */
+.tab-viewer-group {
+  width: 100%;
+  max-width: 1200px;
+}
+
+.tab-header {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  padding: 1rem 1.25rem;
+  box-shadow: var(--shadow);
+  margin-bottom: 0.5rem;
+}
+
+.tab-header h3 {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 0.75rem;
+}
+
+.tab-controls-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.tab-info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0.5rem;
+  min-height: 1.5rem;
+}
+
+.tab-song-info {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--accent-gold);
+}
+
+.tab-position {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.tab-loop-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+/* Canvas container */
+.tab-canvas-container {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.tab-canvas-wrap {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: var(--bg-surface) var(--bg-secondary);
+}
+
+.tab-canvas-wrap::-webkit-scrollbar {
+  height: 8px;
+}
+
+.tab-canvas-wrap::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+
+.tab-canvas-wrap::-webkit-scrollbar-thumb {
+  background: var(--bg-surface);
+  border-radius: 4px;
+}
+
+.tab-canvas {
+  display: block;
+  cursor: pointer;
+}
+
+@media (max-width: 768px) {
+  .tab-viewer-group {
+    max-width: 100%;
+  }
+
+  .tab-controls-row {
+    gap: 0.4rem;
+  }
+
+  .tab-song-info {
+    font-size: 0.8rem;
+  }
+}

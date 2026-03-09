@@ -1,0 +1,226 @@
+/* Chord diagram */
+.chord-diagram-svg {
+  display: block;
+}
+
+.cd-title {
+  fill: var(--text-primary);
+  font-family: var(--font-main);
+  font-size: 14px;
+  font-weight: 700;
+  text-anchor: middle;
+}
+
+.cd-nut {
+  fill: var(--fb-nut);
+}
+
+.cd-position {
+  fill: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
+.cd-fret-line {
+  stroke: var(--fb-fret-wire);
+  stroke-width: 1;
+}
+
+.cd-string-line {
+  stroke: var(--fb-string);
+  stroke-width: 1;
+}
+
+.cd-dot {
+  fill: var(--accent-blue);
+}
+
+.cd-barre {
+  fill: var(--accent-blue);
+  opacity: 0.85;
+}
+
+.cd-finger {
+  fill: var(--note-text);
+  font-family: var(--font-main);
+  font-size: 9px;
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
+.cd-marker {
+  font-family: var(--font-main);
+  font-size: 11px;
+  font-weight: 600;
+  text-anchor: middle;
+}
+
+.cd-muted {
+  fill: var(--accent-red);
+}
+
+.cd-open {
+  fill: var(--accent-green);
+}
+
+/* Chord selector group */
+.chord-selector-group {
+  flex: 1 1 100%;
+  max-width: 700px;
+}
+
+.chord-selector-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+
+.chord-bottom-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 0.5rem;
+}
+
+.chord-diagram-container {
+  min-width: 120px;
+  min-height: 50px;
+}
+
+.chord-voicing-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.chord-nav-label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  min-width: 3rem;
+  text-align: center;
+}
+
+/* Chord practice group */
+.chord-practice-group {
+  flex: 1 1 100%;
+  max-width: 700px;
+}
+
+.practice-settings-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+
+.bpm-control {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.bpm-control label {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.bpm-control input[type="range"] {
+  width: 80px;
+  accent-color: var(--accent-blue);
+}
+
+.bpm-value {
+  font-size: 0.8rem;
+  color: var(--accent-gold);
+  font-weight: 600;
+  min-width: 2rem;
+}
+
+.bpc-control {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.practice-start-btn {
+  min-width: 3.5rem;
+}
+
+/* Progression display */
+.progression-display {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+  min-height: 2rem;
+  align-items: center;
+}
+
+.progression-chord {
+  padding: 0.35rem 0.75rem;
+  border-radius: var(--radius);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  font-weight: 600;
+  border: 1px solid var(--border-color);
+  transition: all var(--transition);
+}
+
+.progression-chord.current {
+  background: var(--accent-blue);
+  color: var(--note-text);
+  border-color: var(--accent-blue);
+  transform: scale(1.1);
+}
+
+.progression-chord.next {
+  border-color: var(--accent-gold);
+  color: var(--accent-gold);
+}
+
+/* Beat indicator */
+.beat-display {
+  display: flex;
+  gap: 0.4rem;
+  min-height: 1.5rem;
+  align-items: center;
+}
+
+.beat-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  transition: all var(--transition);
+}
+
+.beat-dot.active {
+  background: var(--accent-gold);
+  border-color: var(--accent-gold);
+  box-shadow: 0 0 6px var(--accent-gold);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .chord-selector-group,
+  .chord-practice-group {
+    max-width: 100%;
+  }
+
+  .chord-bottom-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .practice-settings-row {
+    gap: 0.4rem;
+  }
+}

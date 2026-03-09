@@ -1,0 +1,176 @@
+/* SVG Fretboard styles */
+
+.fretboard-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Fretboard body */
+.fb-body {
+  fill: var(--fb-body);
+}
+
+/* Nut */
+.fb-nut {
+  fill: var(--fb-nut);
+}
+
+/* Fret wire */
+.fb-fret {
+  stroke: var(--fb-fret-wire);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+/* Strings */
+.fb-string {
+  stroke: var(--fb-string);
+  stroke-linecap: round;
+  fill: none;
+}
+
+/* Fret inlay markers */
+.fb-inlay {
+  fill: var(--fb-inlay);
+}
+
+/* Hit areas (invisible clickable zones) */
+.fb-hit-area {
+  fill: transparent;
+  cursor: pointer;
+  stroke: none;
+}
+
+.fb-hit-area:hover {
+  fill: rgba(79, 195, 247, 0.1);
+}
+
+/* Note circles */
+.fb-note {
+  opacity: 0;
+  transition: opacity var(--transition), transform var(--transition);
+  pointer-events: none;
+}
+
+.fb-note.visible {
+  opacity: 1;
+}
+
+.fb-note-circle {
+  fill: var(--note-bg);
+  transition: fill var(--transition);
+}
+
+.fb-note.highlight .fb-note-circle {
+  fill: var(--note-highlight);
+}
+
+.fb-note.root .fb-note-circle {
+  fill: var(--note-root);
+}
+
+.fb-note.active .fb-note-circle {
+  fill: var(--accent-green);
+}
+
+.fb-note-text {
+  fill: var(--note-text);
+  font-family: var(--font-main);
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
+}
+
+/* Open string labels (left of nut) */
+.fb-open-label {
+  fill: var(--text-secondary);
+  font-family: var(--font-main);
+  font-size: 12px;
+  font-weight: 600;
+  text-anchor: middle;
+  dominant-baseline: central;
+  cursor: pointer;
+}
+
+.fb-open-label:hover {
+  fill: var(--accent-blue);
+}
+
+/* Fret numbers along bottom */
+.fb-fret-number {
+  fill: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-anchor: middle;
+  dominant-baseline: hanging;
+}
+
+/* Hover state for notes */
+.fb-hit-area:hover + .fb-note,
+.fb-note.hover-show {
+  opacity: 1;
+}
+
+/* Scale degree coloring */
+.fb-note.scale-tone .fb-note-circle {
+  fill: var(--accent-blue);
+}
+
+.fb-note.degree-root .fb-note-circle,
+.fb-note.root .fb-note-circle {
+  fill: var(--accent-gold);
+}
+
+.fb-note.degree-2 .fb-note-circle {
+  fill: #bb9af7; /* Tokyo Night purple */
+}
+
+.fb-note.degree-3 .fb-note-circle {
+  fill: #7dcfff; /* Tokyo Night cyan */
+}
+
+.fb-note.degree-4 .fb-note-circle {
+  fill: #9ece6a; /* Tokyo Night green */
+}
+
+.fb-note.degree-5 .fb-note-circle {
+  fill: #ff9e64; /* Tokyo Night orange */
+}
+
+.fb-note.degree-6 .fb-note-circle {
+  fill: #f7768e; /* Tokyo Night red */
+}
+
+.fb-note.degree-7 .fb-note-circle {
+  fill: #2ac3de; /* Tokyo Night teal */
+}
+
+/* Highlight overrides scale colors */
+.fb-note.highlight .fb-note-circle {
+  fill: var(--note-highlight);
+}
+
+.fb-note.active .fb-note-circle {
+  fill: var(--accent-green);
+}
+
+/* Scale playback — currently playing note */
+.fb-note.playing .fb-note-circle {
+  fill: var(--accent-green);
+  filter: drop-shadow(0 0 6px var(--accent-green));
+}
+
+/* Playing animation */
+@keyframes note-ping {
+  0% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+
+.fb-note-ping {
+  animation: note-ping 0.4s ease-out forwards;
+  pointer-events: none;
+}
