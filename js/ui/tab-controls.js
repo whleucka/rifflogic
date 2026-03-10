@@ -6,6 +6,7 @@ import { TabRenderer } from '../tab/tab-renderer.js';
 import { TabPlayer } from '../tab/tab-player.js';
 import { setVoiceType, VOICE_TYPES } from '../audio/synth-voice.js';
 import { events, TAB_LOADED, TAB_BEAT_ON, TAB_POSITION, TAB_STOP } from '../events.js';
+import { VIEW_CHANGE } from './toolbar.js';
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
 const ACCEPTED_EXTENSIONS = ['.gp'];
@@ -23,10 +24,20 @@ export function renderTabViewer(container) {
   titleRow.className = 'tab-title-row';
   titleRow.innerHTML = '<h3 style="margin:0">Tab Viewer</h3>';
 
+  const titleControls = document.createElement('div');
+  titleControls.className = 'tab-title-controls';
+
   const mixerToggle = document.createElement('button');
-  mixerToggle.className = 'icon-btn tab-mixer-toggle';
+  mixerToggle.className = 'tab-mixer-toggle';
   mixerToggle.innerHTML = 'Tracks &#9660;';
-  titleRow.appendChild(mixerToggle);
+
+  const expandToggle = document.createElement('button');
+  expandToggle.className = 'tab-expand-toggle';
+  expandToggle.textContent = 'Expand View';
+
+  titleControls.appendChild(mixerToggle);
+  titleControls.appendChild(expandToggle);
+  titleRow.appendChild(titleControls);
   header.appendChild(titleRow);
 
   // Row 1: File + Track + Voice + Bars/Line
@@ -223,6 +234,19 @@ export function renderTabViewer(container) {
   mixerToggle.addEventListener('click', () => {
     const isHidden = mixerWrap.classList.toggle('hidden');
     mixerToggle.innerHTML = isHidden ? 'Tracks &#9660;' : 'Tracks &#9650;';
+  });
+
+  expandToggle.addEventListener('click', () => {
+    const isExpanded = document.body.classList.toggle('tabs-expanded');
+    expandToggle.textContent = isExpanded ? 'Exit Expand' : 'Expand View';
+    // Trigger window resize so the renderer recomputes layout for the new container size
+    window.dispatchEvent(new Event('resize'));
+  });
+
+  // Always exit expand mode when switching views
+  events.on(VIEW_CHANGE, () => {
+    document.body.classList.remove('tabs-expanded');
+    expandToggle.textContent = 'Expand View';
   });
 
   /**

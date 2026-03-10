@@ -70,6 +70,16 @@
   gap: 2rem;
 }
 
+body.tabs-expanded #toolbar,
+body.tabs-expanded #fretboard-container {
+  display: none;
+}
+
+body.tabs-expanded #main {
+  padding: 0;
+  gap: 0;
+}
+
 #fretboard-container {
   width: 100%;
   max-width: 1600px;

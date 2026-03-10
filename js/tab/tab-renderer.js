@@ -22,8 +22,8 @@ const TAB = {
   tabLabelOffsetMid: 3,
   tabLabelOffsetBot: 12,
   sectionLabelOffsetY: -40,
-  measureNumOffsetX: 3,
-  measureNumOffsetY: -5,
+  measureNumOffsetX: 4,
+  measureNumOffsetY: -12,
   pmLabelOffsetY: -20,
   pmDashPattern: [2, 2],
   pmFontSize: 8,
@@ -43,7 +43,7 @@ const TAB = {
   barlineEndWidth: 2,
   barlineStartInset: -10,
   barlineEndInset: 10,
-  measureNumFontSize: 9,
+  measureNumFontSize: 11,
   tabLabelFontSize: 10,
   titleFontSize: 12,
   loopMarkerWidth: 2,
@@ -903,16 +903,42 @@ export class TabRenderer {
     const system = this.systems.find(s => s.y === pos.y);
     if (!system) return;
 
+    const top = system.y + TAB.marginTop - TAB.cursorOverhang;
+    const bottom = system.y + system.height - TAB.marginBottom + TAB.cursorOverhang;
+
+    // Subtle background highlight for the beat column
+    ctx.fillStyle = c.cursor;
+    ctx.globalAlpha = 0.15;
+    ctx.fillRect(pos.x - 12, top, 24, bottom - top);
+
+    // Main cursor line (thinner and behind notes)
     ctx.strokeStyle = c.cursor;
-    ctx.lineWidth = TAB.cursorWidth;
+    ctx.lineWidth = 1;
     ctx.globalAlpha = 0.5;
     ctx.beginPath();
-    ctx.moveTo(pos.x, system.y + TAB.marginTop - TAB.cursorOverhang);
-    ctx.lineTo(pos.x, system.y + system.height - TAB.marginBottom + TAB.cursorOverhang);
+    ctx.moveTo(pos.x, top);
+    ctx.lineTo(pos.x, bottom);
     ctx.stroke();
+
+    // Top/Bottom markers (small triangles)
+    ctx.fillStyle = c.cursor;
+    ctx.globalAlpha = 0.8;
+    ctx.beginPath();
+    // Top triangle
+    ctx.moveTo(pos.x - 6, top);
+    ctx.lineTo(pos.x + 6, top);
+    ctx.lineTo(pos.x, top + 8);
+    ctx.fill();
+    // Bottom triangle
+    ctx.beginPath();
+    ctx.moveTo(pos.x - 6, bottom);
+    ctx.lineTo(pos.x + 6, bottom);
+    ctx.lineTo(pos.x, bottom - 8);
+    ctx.fill();
+
     ctx.globalAlpha = 1;
 
-    // Highlight cursor notes on static canvas by re-drawing them in cursor color
+    // Highlight cursor notes
     this._highlightCursorNotes();
   }
 
@@ -928,27 +954,31 @@ export class TabRenderer {
     if (!pos) return;
     const staffY = pos.staffY;
 
+    ctx.save();
+    // Use a subtle shadow to make the gold note pop against the line
+    // without needing a solid background box.
+    ctx.shadowColor = c.bg;
+    ctx.shadowBlur = 4;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+
     for (const note of event.notes) {
       if (note.tieDestination) continue;
       if (note.string < 0 || note.string >= stringCount) continue;
 
       const x = pos.x;
       const y = staffY + (stringCount - 1 - note.string) * TAB.lineSpacing;
-      const textW = note.fret >= 10 ? TAB.noteTextWidthDouble : TAB.noteTextWidthSingle;
-
-      // Background
-      ctx.fillStyle = c.bg;
-      ctx.fillRect(x - textW / 2 - TAB.noteTextPadding, y - TAB.noteTextHalfHeight, textW + TAB.noteTextPadding * 2, TAB.noteTextHalfHeight * 2);
 
       // Note in cursor color
       ctx.fillStyle = c.cursor;
-      ctx.font = `bold ${TAB.fontSize}px ${c.fontMono}`;
+      ctx.font = `bold ${TAB.fontSize + 1}px ${c.fontMono}`; // slightly larger
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
 
       if (note.muted) ctx.fillText('X', x, y);
       else ctx.fillText(note.fret, x, y);
     }
+    ctx.restore();
   }
 
   _drawLoopMarkers(ctx, c) {
