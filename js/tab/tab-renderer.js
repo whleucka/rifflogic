@@ -6,6 +6,7 @@
 import { computeLayout } from './tab-layout.js';
 import { renderStaticContent } from './tab-drawing.js';
 import { TAB_CONSTANTS } from './tab-constants.js';
+import { events, TAB_POSITION } from '../events.js';
 
 export class TabRenderer {
   constructor(container) {
@@ -44,6 +45,7 @@ export class TabRenderer {
     // Smooth cursor state
     this._lastHighlightIndex = -1;
     this._lastScrollSystem = null;
+    this._lastMasterBarIndex = -1;
 
     // Cached theme colors
     this._colors = null;
@@ -130,8 +132,15 @@ export class TabRenderer {
 
     // Find which measure contains this time
     let measure = null;
-    for (const m of measures) {
-      if (playbackTime >= m.startTime - 0.001 && playbackTime < m.endTime) {
+    for (let i = 0; i < measures.length; i++) {
+      const m = measures[i];
+      // Use <= for endTime to handle measure boundaries, or find next measure if past end
+      if (playbackTime >= m.startTime - 0.001 && playbackTime <= m.endTime + 0.001) {
+        measure = m;
+        break;
+      }
+      // If we're past this measure but before the next, stay on this measure
+      if (playbackTime > m.endTime && (i === measures.length - 1 || playbackTime < measures[i + 1].startTime)) {
         measure = m;
         break;
       }
@@ -177,6 +186,15 @@ export class TabRenderer {
       this._renderOverlay();
     }
 
+    // Update bar counter when measure changes
+    if (measure.masterBarIndex !== this._lastMasterBarIndex) {
+      this._lastMasterBarIndex = measure.masterBarIndex;
+      events.emit(TAB_POSITION, {
+        masterBarIndex: measure.masterBarIndex,
+        totalBars: measures.length,
+      });
+    }
+
     // Only scroll when system changes
     if (system !== this._lastScrollSystem) {
       this._lastScrollSystem = system;
@@ -192,6 +210,7 @@ export class TabRenderer {
     this.cursorIndex = -1;
     this._lastHighlightIndex = -1;
     this._lastScrollSystem = null;
+    this._lastMasterBarIndex = -1;
     this.cursorEl.style.display = 'none';
     this._renderOverlay();
   }

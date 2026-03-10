@@ -110,7 +110,6 @@ body.tabs-expanded #main {
 }
 
 .view-panel {
-  flex: 1;
   display: flex;
   flex-wrap: wrap;
   gap: 1.5rem;
@@ -124,6 +123,7 @@ body.tabs-expanded #main {
 }
 
 #view-tabs {
+  flex: 1; /* Only tabs view fills viewport height */
   display: flex;
   flex-direction: column;
   width: 100%;
