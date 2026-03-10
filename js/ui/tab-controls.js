@@ -3,7 +3,7 @@
 import { TabRenderer } from '../tab/tab-renderer.js';
 import { TabPlayer } from '../tab/tab-player.js';
 import { setVoiceType, VOICE_TYPES } from '../audio/synth-voice.js';
-import { initFluidSynth, isFluidReady, isFluidLoading, assignChannels } from '../audio/fluid-synth.js';
+import { initFluidSynth, isFluidReady, isFluidLoading, assignChannels, fluidSetVoiceProgram, fluidRestoreOriginalPrograms } from '../audio/fluid-synth.js';
 import { events, TAB_LOADED, TAB_BEAT_ON, TAB_POSITION, TAB_STOP } from '../events.js';
 import { VIEW_CHANGE } from './toolbar.js';
 import { buildSelect, buildButton } from './dom-helpers.js';
@@ -140,12 +140,34 @@ export function renderTabViewer(container) {
     if (!isNaN(n)) renderer.setMeasuresPerLine(n);
   });
 
+  // GM program numbers for voice types (General MIDI)
+  const VOICE_GM_PROGRAMS = {
+    [VOICE_TYPES.ACOUSTIC]: 25,            // Acoustic Guitar (steel)
+    [VOICE_TYPES.ELECTRIC_CLEAN]: 27,      // Electric Guitar (clean)
+    [VOICE_TYPES.ELECTRIC_MUTED]: 28,      // Electric Guitar (muted)
+    [VOICE_TYPES.OVERDRIVEN]: 29,          // Overdriven Guitar
+    [VOICE_TYPES.DISTORTION]: 30,          // Distortion Guitar
+  };
+
   voiceSelect.addEventListener('change', async () => {
     voiceSelect.disabled = true;
     const selectedOption = voiceSelect.options[voiceSelect.selectedIndex];
     const oldLabel = selectedOption.textContent;
     selectedOption.textContent = 'Loading...';
-    await setVoiceType(voiceSelect.value);
+
+    const voice = voiceSelect.value;
+
+    if (voice === VOICE_TYPES.KARPLUS) {
+      // "Default Synth" — bypass FluidSynth, use Karplus-Strong for tab playback
+      fluidSetVoiceProgram(null);
+    } else if (VOICE_GM_PROGRAMS[voice] !== undefined) {
+      // Soundfont voice — use FluidSynth with the matching GM program
+      fluidSetVoiceProgram(VOICE_GM_PROGRAMS[voice]);
+    }
+
+    // Also update synth-voice.js (for fretboard click playback)
+    await setVoiceType(voice);
+
     selectedOption.textContent = oldLabel;
     voiceSelect.disabled = false;
   });
@@ -198,11 +220,33 @@ export function renderTabViewer(container) {
   });
 
   // --- Event bus: visual sync ---
-  events.on(TAB_BEAT_ON, ({ index }) => {
-    renderer.setCursor(index);
+  // Smooth cursor loop — continuously interpolates cursor position from audio clock
+  let cursorRafId = null;
+
+  function startSmoothCursor() {
+    if (cursorRafId) return;
+    const tick = () => {
+      const t = player.getPlaybackTime();
+      if (t >= 0) renderer.setCursorSmooth(t);
+      cursorRafId = requestAnimationFrame(tick);
+    };
+    cursorRafId = requestAnimationFrame(tick);
+  }
+
+  function stopSmoothCursor() {
+    if (cursorRafId) {
+      cancelAnimationFrame(cursorRafId);
+      cursorRafId = null;
+    }
+  }
+
+  events.on(TAB_BEAT_ON, () => {
+    // Start smooth cursor on first beat of playback
+    startSmoothCursor();
   });
 
   events.on(TAB_STOP, () => {
+    stopSmoothCursor();
     renderer.clearCursor();
     transport.actions.onPlaybackStopped();
   });

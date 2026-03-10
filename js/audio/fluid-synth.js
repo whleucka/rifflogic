@@ -21,12 +21,18 @@ let loadError = null;
 
 // Track channel assignments: playerTrackIndex -> MIDI channel (0-15, skip 9)
 let channelMap = new Map();
+// Original per-track programs from GP file, for restoring after voice override
+let originalPrograms = new Map(); // playerTrackIndex -> { bank, program }
+// Whether user has overridden voice (null = use GP file programs)
+let voiceOverrideProgram = null;
+// When true, tab-player should skip FluidSynth and use fallback synth
+let bypassed = false;
 
 /**
  * @returns {boolean} Whether FluidSynth is initialized and ready.
  */
 export function isFluidReady() {
-  return ready;
+  return ready && !bypassed;
 }
 
 /**
@@ -66,7 +72,7 @@ export async function initFluidSynth(onProgress) {
     synth.init(ctx.sampleRate);
 
     // Create ScriptProcessor audio node and connect to our master output
-    audioNode = synth.createAudioNode(ctx, 2048);
+    audioNode = synth.createAudioNode(ctx, 1024);
     audioNode.connect(getMasterOutput());
 
     // Load SF2 (try IndexedDB cache first)
@@ -121,7 +127,12 @@ export function assignChannels(tracks) {
       if (nextChannel === DRUM_CHANNEL) nextChannel++;
 
       channelMap.set(i, nextChannel);
-      synth.midiProgramSelect(nextChannel, sfontId, t.midiBank || 0, t.midiProgram || 25);
+      originalPrograms.set(i, { bank: t.midiBank || 0, program: t.midiProgram || 25 });
+
+      // Use voice override if set, otherwise use the GP file's program
+      const bank = voiceOverrideProgram !== null ? 0 : (t.midiBank || 0);
+      const prog = voiceOverrideProgram !== null ? voiceOverrideProgram : (t.midiProgram || 25);
+      synth.midiProgramSelect(nextChannel, sfontId, bank, prog);
       nextChannel++;
     }
   }
@@ -174,6 +185,52 @@ export function fluidAllNotesOff() {
 }
 
 /**
+ * Override MIDI program on all non-drum channels (voice selector).
+ * Pass null to restore original GP file programs.
+ * @param {number|null} program - GM program number (0-127) or null to restore
+ */
+/**
+ * Override MIDI program on all non-drum channels (voice selector).
+ * Pass null to bypass FluidSynth and use fallback synth.
+ * Pass a GM program number to override all non-drum channels.
+ * @param {number|null} program - GM program number (0-127) or null to bypass
+ */
+export function fluidSetVoiceProgram(program) {
+  voiceOverrideProgram = program;
+
+  if (program === null) {
+    // Bypass FluidSynth — tab-player will use Karplus-Strong fallback
+    bypassed = true;
+    if (ready) fluidAllNotesOff();
+    return;
+  }
+
+  // Re-enable FluidSynth with the selected program
+  bypassed = false;
+  if (!ready) return;
+
+  for (const [trackIdx, ch] of channelMap) {
+    if (ch === DRUM_CHANNEL) continue;
+    synth.midiProgramSelect(ch, sfontId, 0, program);
+  }
+}
+
+/**
+ * Restore original GP file programs and re-enable FluidSynth.
+ */
+export function fluidRestoreOriginalPrograms() {
+  bypassed = false;
+  voiceOverrideProgram = null;
+  if (!ready) return;
+
+  for (const [trackIdx, ch] of channelMap) {
+    if (ch === DRUM_CHANNEL) continue;
+    const orig = originalPrograms.get(trackIdx);
+    if (orig) synth.midiProgramSelect(ch, sfontId, orig.bank, orig.program);
+  }
+}
+
+/**
  * Clean up and release resources.
  */
 export function destroyFluidSynth() {
@@ -195,6 +252,9 @@ function _cleanup() {
   sfontId = -1;
   ready = false;
   channelMap = new Map();
+  originalPrograms = new Map();
+  voiceOverrideProgram = null;
+  bypassed = false;
 }
 
 async function _fetchSF2(onProgress) {

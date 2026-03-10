@@ -238,6 +238,20 @@ body.tabs-expanded .tab-canvas-wrap {
   pointer-events: auto;
 }
 
+.tab-smooth-cursor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--accent-gold, #e0af68);
+  opacity: 0.8;
+  pointer-events: none;
+  will-change: transform;
+  z-index: 2;
+  display: none;
+}
+
 @media (max-width: 768px) {
   .tab-viewer-group {
     max-width: 100%;

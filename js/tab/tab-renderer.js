@@ -1,5 +1,6 @@
 // Canvas-based scrolling tab renderer
-// Uses dual-canvas layering: static tab content + animated cursor overlay
+// Uses dual-canvas layering: static tab content + overlay for note highlights/loop markers
+// Smooth playback cursor uses a GPU-composited DOM element (zero canvas redraws per frame)
 // Delegates layout to tab-layout.js and static drawing to tab-drawing.js
 
 import { computeLayout } from './tab-layout.js';
@@ -15,15 +16,20 @@ export class TabRenderer {
     this.canvas.className = 'tab-canvas';
     this.ctx = this.canvas.getContext('2d');
 
-    // Overlay canvas (cursor, loop markers — redrawn frequently)
+    // Overlay canvas (note highlights, loop markers — redrawn only on beat/loop change)
     this.overlayCanvas = document.createElement('canvas');
     this.overlayCanvas.className = 'tab-canvas tab-canvas-overlay';
     this.overlayCtx = this.overlayCanvas.getContext('2d');
+
+    // DOM cursor element (GPU-composited, moved via transform — zero paint cost)
+    this.cursorEl = document.createElement('div');
+    this.cursorEl.className = 'tab-smooth-cursor';
 
     this.wrap = document.createElement('div');
     this.wrap.className = 'tab-canvas-wrap';
     this.wrap.appendChild(this.canvas);
     this.wrap.appendChild(this.overlayCanvas);
+    this.wrap.appendChild(this.cursorEl);
     container.appendChild(this.wrap);
 
     this.track = null;
@@ -34,6 +40,10 @@ export class TabRenderer {
     this.cursorIndex = -1;
     this.loopA = null;
     this.loopB = null;
+
+    // Smooth cursor state
+    this._lastHighlightIndex = -1;
+    this._lastScrollSystem = null;
 
     // Cached theme colors
     this._colors = null;
@@ -83,22 +93,106 @@ export class TabRenderer {
     this.cursorIndex = -1;
     this.loopA = null;
     this.loopB = null;
+    this._lastHighlightIndex = -1;
+    this._lastScrollSystem = null;
+    // Cache system reference on each measure for O(1) lookup
+    this._cacheSystemRefs();
 
     this._refreshColors();
     this._doLayout();
+    this._cacheSystemRefs(); // re-cache after layout
     this._renderStatic();
     this._renderOverlay();
+    this.cursorEl.style.display = 'none';
   }
 
+  /** Discrete beat-based cursor (used when not playing) */
   setCursor(index) {
     if (this.cursorIndex === index) return;
     this.cursorIndex = index;
+    this.cursorEl.style.display = 'none';
     this._renderOverlay();
     this._scrollToCursor();
   }
 
+  /**
+   * Smooth time-based cursor — sweeps continuously across measures.
+   * Only updates a DOM element transform (GPU-composited, no canvas redraw).
+   * Redraws overlay canvas only when the beat changes (for note highlighting).
+   * @param {number} playbackTime - current time in the timeline's time space (seconds)
+   */
+  setCursorSmooth(playbackTime) {
+    if (!this.track || !this.track.measures) return;
+
+    const measures = this.track.measures;
+    const timeline = this.track.timeline;
+    const C = TAB_CONSTANTS;
+
+    // Find which measure contains this time
+    let measure = null;
+    for (const m of measures) {
+      if (playbackTime >= m.startTime - 0.001 && playbackTime < m.endTime) {
+        measure = m;
+        break;
+      }
+    }
+    if (!measure) return;
+
+    // Find current beat index for note highlighting
+    let beatIdx = 0;
+    for (let i = measure.beatIndices.length - 1; i >= 0; i--) {
+      const bi = measure.beatIndices[i];
+      if (timeline[bi] && timeline[bi].time <= playbackTime + 0.001) {
+        beatIdx = bi;
+        break;
+      }
+    }
+
+    // Progress within measure (0 to 1)
+    const progress = Math.max(0, Math.min(1,
+      (playbackTime - measure.startTime) / (measure.endTime - measure.startTime)
+    ));
+
+    // Compute cursor X from measure's rendered position
+    const hasTimeSig = measure._hasTimeSig;
+    const leftPad = C.measurePadding + (hasTimeSig ? C.timeSigPadLeft + C.timeSigWidth : 0);
+    const innerWidth = measure._renderedWidth - leftPad - C.measurePadding;
+    const x = measure._renderedX + leftPad + progress * innerWidth;
+
+    // Get system from cached ref
+    const system = measure._system;
+    if (!system) return;
+
+    // Position the DOM cursor (GPU-composited — no canvas redraw)
+    const top = system.y + C.marginTop - C.cursorOverhang;
+    const height = system.height - C.marginTop - C.marginBottom + 2 * C.cursorOverhang;
+    this.cursorEl.style.display = '';
+    this.cursorEl.style.transform = `translate(${x}px, ${top}px)`;
+    this.cursorEl.style.height = `${height}px`;
+
+    // Only redraw overlay when beat changes (note highlighting)
+    if (beatIdx !== this._lastHighlightIndex) {
+      this._lastHighlightIndex = beatIdx;
+      this.cursorIndex = beatIdx;
+      this._renderOverlay();
+    }
+
+    // Only scroll when system changes
+    if (system !== this._lastScrollSystem) {
+      this._lastScrollSystem = system;
+      const wrapHeight = this.wrap.clientHeight;
+      const scrollY = this.wrap.scrollTop;
+      if (system.y < scrollY + C.scrollPaddingTop || system.y > scrollY + wrapHeight - C.scrollPaddingBottom) {
+        this.wrap.scrollTo({ top: Math.max(0, system.y - C.scrollTargetOffset), behavior: 'smooth' });
+      }
+    }
+  }
+
   clearCursor() {
     this.cursorIndex = -1;
+    this._lastHighlightIndex = -1;
+    this._lastScrollSystem = null;
+    this.cursorEl.style.display = 'none';
     this._renderOverlay();
   }
 
@@ -135,6 +229,17 @@ export class TabRenderer {
       const index = this.getIndexAtPoint(canvasX, canvasY);
       handler(index);
     };
+  }
+
+  // --- System ref caching ---
+
+  _cacheSystemRefs() {
+    if (!this.systems || !this.track) return;
+    for (const system of this.systems) {
+      for (const measure of system.measures) {
+        measure._system = system;
+      }
+    }
   }
 
   // --- Color caching ---
@@ -200,7 +305,7 @@ export class TabRenderer {
     );
   }
 
-  // --- Overlay rendering (cursor + loop markers) ---
+  // --- Overlay rendering (note highlights + loop markers, NOT the smooth cursor) ---
 
   _renderOverlay() {
     const ctx = this.overlayCtx;
@@ -214,9 +319,16 @@ export class TabRenderer {
 
   _drawCursor(ctx, c) {
     if (this.cursorIndex < 0) return;
+
+    // When DOM cursor is active, only draw note highlights (no canvas cursor line)
+    if (this.cursorEl.style.display !== 'none') {
+      this._highlightCursorNotes();
+      return;
+    }
+
+    // Fallback: discrete beat-based canvas cursor (when not playing)
     const pos = this.beatPositions[this.cursorIndex];
     if (!pos) return;
-
     const system = this.systems.find(s => s.y === pos.y);
     if (!system) return;
 

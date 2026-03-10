@@ -41,6 +41,7 @@ export class TabPlayer {
     this._rafId = null;
     this._pendingVisuals = []; // sorted by scheduledTime
     this._pendingFluidAudio = []; // precision audio queue for FluidSynth
+    this._fluidInterval = null;
   }
 
   /** Primary track shortcuts */
@@ -118,10 +119,12 @@ export class TabPlayer {
     this._syncMetronome(eventTime);
     this._pendingVisuals = [];
     this._pendingFluidAudio = [];
+    this._stopFluidInterval();
 
     this.state = 'playing';
     this.schedulerInterval = setInterval(() => this._scheduler(), SCHEDULE_INTERVAL_MS);
     this._startVisualLoop();
+    if (isFluidReady()) this._startFluidInterval();
   }
 
   pause() {
@@ -131,6 +134,7 @@ export class TabPlayer {
     this._stopVisualLoop();
     this._pendingVisuals = [];
     this._pendingFluidAudio = [];
+    this._stopFluidInterval();
     if (isFluidReady()) fluidAllNotesOff();
   }
 
@@ -148,10 +152,12 @@ export class TabPlayer {
     this._syncMetronome(eventTime);
     this._pendingVisuals = [];
     this._pendingFluidAudio = [];
+    this._stopFluidInterval();
 
     this.state = 'playing';
     this.schedulerInterval = setInterval(() => this._scheduler(), SCHEDULE_INTERVAL_MS);
     this._startVisualLoop();
+    if (isFluidReady()) this._startFluidInterval();
   }
 
   stop() {
@@ -160,6 +166,7 @@ export class TabPlayer {
     this._stopVisualLoop();
     this._pendingVisuals = [];
     this._pendingFluidAudio = [];
+    this._stopFluidInterval();
     for (const t of this.tracks) t.currentIndex = 0;
     if (isFluidReady()) fluidAllNotesOff();
     events.emit(TAB_STOP);
@@ -171,6 +178,15 @@ export class TabPlayer {
   destroy() {
     this.stop();
     this.tracks = [];
+  }
+
+  /**
+   * Returns the current playback time in the timeline's time space (seconds).
+   * Returns -1 if not playing.
+   */
+  getPlaybackTime() {
+    if (this.state !== 'playing') return -1;
+    return (getAudioContext().currentTime - this.startTime) * this.tempoScale;
   }
 
   setTempoScale(scale) {
@@ -314,12 +330,11 @@ export class TabPlayer {
     scheduleClick(time, isDownbeat);
   }
 
-  // --- rAF-based visual sync ---
+  // --- Visual sync (rAF, ~60fps — fine for cursor updates) ---
 
   _startVisualLoop() {
     const tick = () => {
       if (this.state !== 'playing') return;
-      this._flushFluidAudio();
       this._flushVisuals();
       this._rafId = requestAnimationFrame(tick);
     };
@@ -330,6 +345,20 @@ export class TabPlayer {
     if (this._rafId) {
       cancelAnimationFrame(this._rafId);
       this._rafId = null;
+    }
+  }
+
+  // --- FluidSynth audio sync (tight interval for low-latency note firing) ---
+
+  _startFluidInterval() {
+    if (this._fluidInterval) return;
+    this._fluidInterval = setInterval(() => this._flushFluidAudio(), 5);
+  }
+
+  _stopFluidInterval() {
+    if (this._fluidInterval) {
+      clearInterval(this._fluidInterval);
+      this._fluidInterval = null;
     }
   }
 
