@@ -4,12 +4,13 @@ import { TabRenderer } from '../tab/tab-renderer.js';
 import { TabPlayer } from '../tab/tab-player.js';
 import { setVoiceType, VOICE_TYPES } from '../audio/synth-voice.js';
 import { initFluidSynth, isFluidReady, isFluidLoading, assignChannels, fluidSetVoiceProgram, fluidRestoreOriginalPrograms } from '../audio/fluid-synth.js';
-import { events, TAB_LOADED, TAB_BEAT_ON, TAB_POSITION, TAB_STOP } from '../events.js';
+import { events, TAB_LOADED, TAB_BEAT_ON, TAB_POSITION, TAB_STOP, TUNING_CHANGE } from '../events.js';
 import { VIEW_CHANGE } from './toolbar.js';
 import { buildSelect, buildButton } from './dom-helpers.js';
 import { createFileLoader } from './tab-file-loader.js';
 import { createTransport } from './tab-transport.js';
 import { createMixer } from './tab-mixer.js';
+import { midiToNoteName } from '../music/notes.js';
 
 export function renderTabViewer(container) {
   const group = document.createElement('div');
@@ -353,5 +354,15 @@ export function renderTabViewer(container) {
       name: track.name,
       tuning: td.tuning,
     });
+
+    // Emit tuning change for fretboard update
+    if (td.tuning && td.tuning.length === 6) {
+      const tuningName = td.tuning.map(midi => midiToNoteName(midi)).join(' ');
+      events.emit(TUNING_CHANGE, {
+        tuning: td.tuning,
+        name: tuningName,
+        source: 'tab'
+      });
+    }
   }
 }

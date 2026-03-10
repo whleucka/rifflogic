@@ -8,7 +8,7 @@ import { renderChordSelector } from './ui/chord-selector.js';
 import { renderChordPractice } from './ui/chord-practice.js';
 import { renderTabViewer } from './ui/tab-controls.js';
 import { renderToolbar, VIEW_CHANGE } from './ui/toolbar.js';
-import { events } from './events.js';
+import { events, TUNING_CHANGE } from './events.js';
 
 function init() {
   // Toolbar
@@ -16,9 +16,23 @@ function init() {
 
   // Fretboard (always visible)
   const fretboardContainer = document.getElementById('fretboard-container');
-  const { svg, noteElements } = renderFretboard();
+  let { svg, noteElements } = renderFretboard();
   fretboardContainer.appendChild(svg);
   setupInteraction(svg, noteElements);
+
+  // Listen for tuning changes and re-render fretboard
+  events.on(TUNING_CHANGE, ({ tuning }) => {
+    // Remove old fretboard
+    fretboardContainer.innerHTML = '';
+    
+    // Render new fretboard with updated tuning
+    const result = renderFretboard(tuning);
+    svg = result.svg;
+    noteElements = result.noteElements;
+    
+    fretboardContainer.appendChild(svg);
+    setupInteraction(svg, noteElements);
+  });
 
   // --- View: Scales ---
   const scalesView = document.createElement('div');

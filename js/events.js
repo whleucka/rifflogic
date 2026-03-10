@@ -37,3 +37,4 @@ export const TAB_STOP = 'tab:stop';
 export const TAB_BEAT_ON = 'tab:beat-on';
 export const TAB_BEAT_OFF = 'tab:beat-off';
 export const TAB_POSITION = 'tab:position';
+export const TUNING_CHANGE = 'tuning:change';

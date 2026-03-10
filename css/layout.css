@@ -220,6 +220,41 @@ body.tabs-expanded #main {
   border-color: var(--accent-green);
 }
 
+.tuning-control {
+  margin-top: 0.8rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.tuning-control label {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.tuning-select {
+  padding: 0.4rem 0.6rem;
+  border-radius: var(--radius);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  border: 1px solid var(--border-color);
+  font-family: var(--font-mono);
+  min-width: 200px;
+  cursor: pointer;
+  transition: border-color var(--transition);
+}
+
+.tuning-select:hover {
+  border-color: var(--accent-blue);
+}
+
+.tuning-select:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+}
+
 /* Scale selector */
 .scale-selector-group {
   flex: 1 1 100%;

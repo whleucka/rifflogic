@@ -1,9 +1,9 @@
 // Note highlight buttons, volume slider, show/hide toggle
 
 import { NOTE_NAMES } from '../music/notes.js';
-import { events, NOTE_HIGHLIGHT, NOTE_CLEAR_HIGHLIGHT, SHOW_ALL_NOTES, VOLUME_CHANGE } from '../events.js';
+import { events, NOTE_HIGHLIGHT, NOTE_CLEAR_HIGHLIGHT, SHOW_ALL_NOTES, VOLUME_CHANGE, TUNING_CHANGE } from '../events.js';
 import { setMasterVolume } from '../audio/audio-engine.js';
-import { AUDIO } from '../config.js';
+import { AUDIO, TUNING_PRESETS } from '../config.js';
 
 export function renderControls(container) {
   // --- Note highlight buttons ---
@@ -72,6 +72,55 @@ export function renderControls(container) {
   });
   toggleWrap.appendChild(toggleBtn);
   settingsGroup.appendChild(toggleWrap);
+
+  // Tuning selector
+  const tuningWrap = document.createElement('div');
+  tuningWrap.className = 'tuning-control';
+  tuningWrap.innerHTML = `<label for="tuning-select">Tuning</label>`;
+  
+  const tuningSelect = document.createElement('select');
+  tuningSelect.id = 'tuning-select';
+  tuningSelect.className = 'tuning-select';
+  
+  // Add "From Tab" option (will be selected when tab loads)
+  const fromTabOption = document.createElement('option');
+  fromTabOption.value = 'from-tab';
+  fromTabOption.textContent = 'From Tab (Standard E)';
+  fromTabOption.disabled = true;
+  tuningSelect.appendChild(fromTabOption);
+  
+  // Add preset tunings
+  TUNING_PRESETS.forEach((preset, index) => {
+    const option = document.createElement('option');
+    option.value = index.toString();
+    option.textContent = `${preset.name} (${preset.notes})`;
+    tuningSelect.appendChild(option);
+  });
+  
+  // Set default to Standard E
+  tuningSelect.value = '0';
+  
+  tuningSelect.addEventListener('change', () => {
+    const selectedIndex = parseInt(tuningSelect.value);
+    const preset = TUNING_PRESETS[selectedIndex];
+    events.emit(TUNING_CHANGE, { 
+      tuning: preset.midi, 
+      name: preset.name,
+      source: 'manual'
+    });
+  });
+  
+  tuningWrap.appendChild(tuningSelect);
+  settingsGroup.appendChild(tuningWrap);
+
+  // Listen for tab tuning changes to update selector
+  events.on(TUNING_CHANGE, ({ tuning, name, source }) => {
+    if (source === 'tab') {
+      fromTabOption.disabled = false;
+      fromTabOption.textContent = `From Tab (${name || 'Custom'})`;
+      tuningSelect.value = 'from-tab';
+    }
+  });
 
   container.appendChild(settingsGroup);
 }

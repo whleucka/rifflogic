@@ -9,6 +9,21 @@ export const TUNING = [
   { string: 1, note: 'E', octave: 4, midi: 64 },  // High E
 ];
 
+// Common tuning presets
+export const TUNING_PRESETS = [
+  { name: 'Standard (E)', midi: [40, 45, 50, 55, 59, 64], notes: 'E A D G B E' },
+  { name: 'Drop D', midi: [38, 45, 50, 55, 59, 64], notes: 'D A D G B E' },
+  { name: 'Half Step Down', midi: [39, 44, 49, 54, 58, 63], notes: 'Eb Ab Db Gb Bb Eb' },
+  { name: 'Drop Db', midi: [37, 44, 49, 54, 58, 63], notes: 'Db Ab Db Gb Bb Eb' },
+  { name: 'Whole Step Down', midi: [38, 43, 48, 53, 57, 62], notes: 'D G C F A D' },
+  { name: 'Drop C', midi: [36, 43, 48, 53, 57, 62], notes: 'C G C F A D' },
+  { name: 'Drop B', midi: [35, 42, 47, 52, 56, 61], notes: 'B F# B E G# C#' },
+  { name: 'Drop A', midi: [33, 40, 45, 50, 54, 59], notes: 'A E A D F# B' },
+  { name: 'DADGAD', midi: [38, 45, 50, 55, 57, 62], notes: 'D A D G A D' },
+  { name: 'Open G', midi: [38, 43, 50, 55, 59, 62], notes: 'D G D G B D' },
+  { name: 'Open D', midi: [38, 45, 50, 54, 57, 62], notes: 'D A D F# A D' },
+];
+
 export const FRET_COUNT = 22;
 
 // SVG dimensions

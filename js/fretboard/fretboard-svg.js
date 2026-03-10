@@ -8,8 +8,12 @@ import { svgEl, SVG_NS } from '../ui/dom-helpers.js';
 /**
  * Build the complete fretboard SVG and return { svg, noteElements }.
  * noteElements is a Map keyed by "string-fret" for later highlight/interaction.
+ * @param {Array} tuning - Optional tuning array of MIDI numbers [40, 45, 50, 55, 59, 64]. Defaults to standard E.
  */
-export function renderFretboard() {
+export function renderFretboard(tuning = null) {
+  // Use provided tuning or fall back to default TUNING constant
+  const activeTuning = tuning ? tuning.map((midi, i) => ({ ...TUNING[i], midi })) : TUNING;
+  
   const fretPositions = computeFretPositions();
   const stringPositions = computeStringPositions();
 
@@ -103,7 +107,7 @@ export function renderFretboard() {
 
   for (let s = 0; s < 6; s++) {
     const sy = stringPositions[s].y;
-    const baseMidi = TUNING[s].midi;
+    const baseMidi = activeTuning[s].midi;
 
     for (let f = 0; f <= FRET_COUNT; f++) {
       const mx = fretMidX(fretPositions, f);
