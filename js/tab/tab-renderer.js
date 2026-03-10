@@ -7,16 +7,16 @@ const TAB = {
   marginLeft: 50,
   marginRight: 20,
   marginTop: 70,
-  marginBottom: 10,
+  marginBottom: 30,         // room for rhythm stems below staff
   systemSpacing: 40,
   cursorWidth: 3,
   fontSize: 12,
   sectionFontSize: 10,
-  measuresPerLine: 5,       // target measures per system (like sheet music)
+  measuresPerLine: 4,       // target measures per system (like sheet music)
   maxMeasuresPerLine: 6,    // never exceed this many
   titleHeight: 35,
 
-  // Annotation offsets (previously magic numbers)
+  // Annotation offsets
   tabLabelX: 20,
   tabLabelOffsetTop: -6,
   tabLabelOffsetMid: 3,
@@ -52,6 +52,22 @@ const TAB = {
   scrollPaddingTop: 50,
   scrollPaddingBottom: 150,
   scrollTargetOffset: 100,
+
+  // Time signature
+  timeSigFontSize: 16,
+  timeSigPadLeft: 6,        // gap between barline and time sig
+  timeSigWidth: 22,         // reserved width for the time sig block
+  timeSigSpacing: 15,       // vertical spacing between numerator and denominator
+
+  // Rhythm stems (Songsterr-style below staff)
+  stemOffset: 6,            // gap between bottom staff line and stem top
+  stemLength: 12,           // length of the stem line
+  stemWidth: 1.5,
+  flagLength: 6,            // length of flag strokes
+  flagSpacing: 3,           // vertical spacing between multiple flags
+  beamThickness: 2,         // thickness of beam lines
+  noteheadRadius: 2.5,      // radius for filled/open noteheads
+  restFontSize: 10,         // font size for rest symbols
 };
 
 export class TabRenderer {
@@ -232,6 +248,9 @@ export class TabRenderer {
     const staffHeight = (this.track.stringCount - 1) * TAB.lineSpacing;
     const systemHeight = staffHeight + TAB.marginTop + TAB.marginBottom;
 
+    // Pre-compute which measures show a time signature (needed for layout padding)
+    const timeSigFlags = this._computeTimeSigFlags(allMeasures, systems);
+
     let currentY = TAB.titleHeight;
 
     for (let sIdx = 0; sIdx < systems.length; sIdx++) {
@@ -245,15 +264,18 @@ export class TabRenderer {
       let currentX = TAB.marginLeft;
       for (const measure of system.measures) {
         const numBeats = measure.beatIndices.length || 1;
+        const hasTimeSig = timeSigFlags.has(measure);
 
         measure._renderedX = currentX;
         measure._renderedWidth = measureWidth;
+        measure._hasTimeSig = hasTimeSig;
 
-        // Evenly space beats within the measure (with padding on each side)
-        const innerWidth = measureWidth - TAB.measurePadding * 2;
+        // Extra left padding when time signature is shown
+        const leftPad = TAB.measurePadding + (hasTimeSig ? TAB.timeSigPadLeft + TAB.timeSigWidth : 0);
+        const innerWidth = measureWidth - leftPad - TAB.measurePadding;
+
         for (let i = 0; i < measure.beatIndices.length; i++) {
-          // Center beats: first beat offset by half a slot from the left padding
-          const beatX = currentX + TAB.measurePadding + (i + 0.5) * (innerWidth / numBeats);
+          const beatX = currentX + leftPad + (i + 0.5) * (innerWidth / numBeats);
           const beatIdx = measure.beatIndices[i];
 
           beatPos[beatIdx] = {
@@ -307,10 +329,12 @@ export class TabRenderer {
 
       this._drawStaffLines(ctx, c, staffY, stringCount);
       this._drawTabLabel(ctx, c, staffY, staffHeight);
+      this._drawTimeSignatures(ctx, c, system, staffY, staffHeight, sIdx);
       this._drawMeasureBars(ctx, c, system, staffY, staffHeight);
       this._drawSystemEndBarline(ctx, c, staffY, staffHeight);
       this._drawPalmMuting(ctx, c, system, staffY, timeline);
       this._drawNotes(ctx, c, system, staffY, stringCount, staffHeight, timeline);
+      this._drawRhythmStems(ctx, c, system, staffY, staffHeight, timeline);
     }
   }
 
@@ -341,6 +365,50 @@ export class TabRenderer {
     ctx.fillText('T', TAB.tabLabelX, midY + TAB.tabLabelOffsetTop);
     ctx.fillText('A', TAB.tabLabelX, midY + TAB.tabLabelOffsetMid);
     ctx.fillText('B', TAB.tabLabelX, midY + TAB.tabLabelOffsetBot);
+  }
+
+  /**
+   * Pre-compute which measures should display a time signature.
+   * Returns a Set of measure objects that need one.
+   */
+  _computeTimeSigFlags(allMeasures, systems) {
+    const flags = new Set();
+    let prevTs = null;
+    let measureIndex = 0;
+
+    for (const system of systems) {
+      for (const measure of system.measures) {
+        const ts = measure.timeSignature;
+        if (ts) {
+          // Show on first measure, or when time sig changes
+          if (measureIndex === 0 || !prevTs || prevTs.num !== ts.num || prevTs.den !== ts.den) {
+            flags.add(measure);
+          }
+          prevTs = ts;
+        }
+        measureIndex++;
+      }
+    }
+    return flags;
+  }
+
+  _drawTimeSignatures(ctx, c, system, staffY, staffHeight, systemIndex) {
+    for (const measure of system.measures) {
+      if (!measure._hasTimeSig) continue;
+      const ts = measure.timeSignature;
+      if (!ts) continue;
+
+      // Position: right after the barline, centered in the reserved space
+      const x = measure._renderedX + TAB.timeSigPadLeft + TAB.timeSigWidth / 2;
+      const midY = staffY + staffHeight / 2;
+
+      ctx.fillStyle = c.gold;
+      ctx.font = `bold ${TAB.timeSigFontSize}px serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(ts.num, x, midY - TAB.timeSigSpacing / 2);
+      ctx.fillText(ts.den, x, midY + TAB.timeSigSpacing / 2);
+    }
   }
 
   _drawMeasureBars(ctx, c, system, staffY, staffHeight) {
@@ -497,6 +565,142 @@ export class TabRenderer {
         }
       }
     }
+  }
+
+  _drawRhythmStems(ctx, c, system, staffY, staffHeight, timeline) {
+    const stemTop = staffY + staffHeight + TAB.stemOffset;
+    const stemBot = stemTop + TAB.stemLength;
+
+    for (const measure of system.measures) {
+      // Collect beat positions and rhythm info for beaming
+      const beats = [];
+      for (const beatIdx of measure.beatIndices) {
+        const event = timeline[beatIdx];
+        if (!event) continue;
+        const pos = this.beatPositions[beatIdx];
+        if (!pos) continue;
+        beats.push({
+          x: pos.x,
+          label: event.rhythmLabel,
+          dotted: event.dotted,
+          isRest: event.notes.length === 0 || event.notes.every(n => n.tieDestination),
+        });
+      }
+
+      for (let i = 0; i < beats.length; i++) {
+        const b = beats[i];
+        const { x, label, dotted, isRest } = b;
+
+        if (isRest) {
+          // Draw rest symbol
+          ctx.fillStyle = c.muted;
+          ctx.font = `${TAB.restFontSize}px sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          const restY = stemTop + TAB.stemLength / 2;
+          // Simple rest glyphs
+          if (label === 'W') {
+            // Whole rest: filled rectangle hanging from line
+            ctx.fillRect(x - 4, stemTop, 8, 3);
+          } else if (label === 'H') {
+            // Half rest: filled rectangle sitting on line
+            ctx.fillRect(x - 4, stemTop + 3, 8, 3);
+          } else {
+            // Quarter and shorter: use a simple symbol
+            ctx.fillText('\u{1D13D}', x, restY); // quarter rest-ish
+          }
+          continue;
+        }
+
+        const flagCount = this._flagCount(label);
+
+        if (label === 'W') {
+          // Whole note: open notehead only, no stem
+          ctx.strokeStyle = c.muted;
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.ellipse(x, stemTop + 2, TAB.noteheadRadius + 1, TAB.noteheadRadius, 0, 0, Math.PI * 2);
+          ctx.stroke();
+          if (dotted) this._drawDot(ctx, c, x + TAB.noteheadRadius + 4, stemTop + 2);
+        } else if (label === 'H') {
+          // Half note: open notehead + stem
+          ctx.strokeStyle = c.muted;
+          ctx.lineWidth = TAB.stemWidth;
+          ctx.beginPath();
+          ctx.moveTo(x, stemTop);
+          ctx.lineTo(x, stemBot);
+          ctx.stroke();
+          // Open notehead
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.ellipse(x, stemBot + TAB.noteheadRadius, TAB.noteheadRadius + 0.5, TAB.noteheadRadius, 0, 0, Math.PI * 2);
+          ctx.stroke();
+          if (dotted) this._drawDot(ctx, c, x + TAB.noteheadRadius + 4, stemBot + TAB.noteheadRadius);
+        } else {
+          // Quarter and shorter: filled notehead + stem + flags/beams
+          ctx.strokeStyle = c.muted;
+          ctx.lineWidth = TAB.stemWidth;
+          ctx.beginPath();
+          ctx.moveTo(x, stemTop);
+          ctx.lineTo(x, stemBot);
+          ctx.stroke();
+
+          // Filled notehead
+          ctx.fillStyle = c.muted;
+          ctx.beginPath();
+          ctx.arc(x, stemBot + TAB.noteheadRadius, TAB.noteheadRadius, 0, Math.PI * 2);
+          ctx.fill();
+
+          if (dotted) this._drawDot(ctx, c, x + TAB.noteheadRadius + 4, stemBot + TAB.noteheadRadius);
+
+          // Beaming: try to beam with the next beat if both have flags
+          if (flagCount > 0) {
+            const next = beats[i + 1];
+            const nextFlagCount = next ? this._flagCount(next.label) : 0;
+            const canBeam = nextFlagCount > 0 && !next?.isRest;
+
+            if (canBeam) {
+              // Draw beams connecting this beat to the next
+              const beamCount = Math.min(flagCount, nextFlagCount);
+              ctx.fillStyle = c.muted;
+              for (let f = 0; f < beamCount; f++) {
+                const by = stemTop + f * TAB.flagSpacing;
+                ctx.fillRect(x, by, next.x - x, TAB.beamThickness);
+              }
+              // Extra flags if this beat has more than next
+              for (let f = beamCount; f < flagCount; f++) {
+                const by = stemTop + f * TAB.flagSpacing;
+                ctx.fillRect(x, by, TAB.flagLength, TAB.beamThickness);
+              }
+            } else {
+              // Standalone flags
+              ctx.fillStyle = c.muted;
+              for (let f = 0; f < flagCount; f++) {
+                const by = stemTop + f * TAB.flagSpacing;
+                ctx.fillRect(x, by, TAB.flagLength, TAB.beamThickness);
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  _flagCount(rhythmLabel) {
+    switch (rhythmLabel) {
+      case '8':  return 1;
+      case '16': return 2;
+      case '32': return 3;
+      case '64': return 4;
+      default:   return 0;
+    }
+  }
+
+  _drawDot(ctx, c, x, y) {
+    ctx.fillStyle = c.muted;
+    ctx.beginPath();
+    ctx.arc(x, y, 1.5, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   // --- Overlay rendering (cursor + loop markers — redrawn on every cursor move) ---
