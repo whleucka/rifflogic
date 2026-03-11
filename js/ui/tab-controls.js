@@ -216,6 +216,7 @@ export function renderTabViewer(container) {
   ytOffsetSlider.addEventListener('input', () => {
     youtubeOffset = parseFloat(ytOffsetSlider.value);
     ytOffsetValue.textContent = `${youtubeOffset.toFixed(1)}s`;
+    console.log(`[YouTube] Offset changed: ${youtubeOffset}`);
   });
 
   /**
