@@ -9,7 +9,7 @@ import { isFluidReady, fluidNoteOn, fluidNoteOff, fluidTrackNotesOff, fluidAllNo
 import { events, TAB_BEAT_ON, TAB_BEAT_OFF, TAB_POSITION, TAB_STOP } from '../events.js';
 import { FLUID_SYNTH } from '../config.js';
 
-const LOOKAHEAD_MS = 100;
+const LOOKAHEAD_MS = 150;
 const SCHEDULE_INTERVAL_MS = 25;
 
 const PRIMARY_GAIN = 0.7;
@@ -188,10 +188,43 @@ export class TabPlayer {
    */
   getPlaybackTime() {
     if (this.state !== 'playing') return -1;
-    const rawTime = (getAudioContext().currentTime - this.startTime) * this.tempoScale;
-    // Delay visual position to account for audio buffer latency
-    // Configurable in config.js FLUID_SYNTH.visualLatencyMs
-    return Math.max(0, rawTime - (FLUID_SYNTH.visualLatencyMs / 1000));
+    const ctx = getAudioContext();
+    const rawTime = (ctx.currentTime - this.startTime) * this.tempoScale;
+    
+    // Use browser's reported output latency if available, otherwise fall back to config
+    let latencySecs = FLUID_SYNTH.visualLatencyMs / 1000;
+    if (FLUID_SYNTH.visualLatencyMs === 0 && ctx.outputLatency) {
+      // Base system latency + 50ms buffer
+      latencySecs = ctx.outputLatency + 0.05;
+      
+      // Add FluidSynth ScriptProcessor buffer latency when active
+      if (isFluidReady()) {
+        const fluidBufferLatency = FLUID_SYNTH.bufferSize / ctx.sampleRate;
+        latencySecs += fluidBufferLatency;
+      }
+    }
+    
+    return Math.max(0, rawTime - latencySecs);
+  }
+
+  /**
+   * Debug: log timing info to console. Call from browser console:
+   * window.tabPlayer.debugTiming()
+   */
+  debugTiming() {
+    const ctx = getAudioContext();
+    console.log('=== Timing Debug ===');
+    console.log('audioContext.currentTime:', ctx.currentTime);
+    console.log('startTime:', this.startTime);
+    console.log('tempoScale:', this.tempoScale);
+    console.log('state:', this.state);
+    console.log('currentIndex:', this.currentIndex);
+    if (this.timeline && this.timeline[this.currentIndex]) {
+      console.log('current event.time:', this.timeline[this.currentIndex].time);
+    }
+    console.log('getPlaybackTime():', this.getPlaybackTime());
+    console.log('pending visuals:', this._pendingVisuals.length);
+    console.log('pending fluid audio:', this._pendingFluidAudio.length);
   }
 
   setTempoScale(scale) {
@@ -371,11 +404,13 @@ export class TabPlayer {
     if (this._pendingFluidAudio.length === 0) return;
     const now = getAudioContext().currentTime;
     let i = 0;
+    let firedCount = 0;
     while (i < this._pendingFluidAudio.length) {
       const entry = this._pendingFluidAudio[i];
       if (entry.time <= now) {
         if (entry.type === 'on') {
           fluidNoteOn(entry.trackIdx, entry.midi, entry.velocity);
+          firedCount++;
         } else if (entry.type === 'off') {
           fluidNoteOff(entry.trackIdx, entry.midi);
         } else if (entry.type === 'rest') {
@@ -387,6 +422,11 @@ export class TabPlayer {
       } else {
         i++;
       }
+    }
+    // Debug: log if notes are being fired
+    if (firedCount > 0 && !this._loggedFluidFire) {
+      console.log(`[FLUID] Firing ${firedCount} notes`);
+      this._loggedFluidFire = true;
     }
   }
 
@@ -425,6 +465,13 @@ export class TabPlayer {
     if (this.state !== 'playing' || !this.timeline) return;
 
     const ctx = getAudioContext();
+    
+    // Debug: check for AudioContext issues
+    if (ctx.state !== 'running') {
+      console.warn(`[AUDIO] Context state: ${ctx.state}`);
+      ctx.resume();
+    }
+    
     const lookahead = LOOKAHEAD_MS / 1000;
     const primary = this.tracks[this.primaryIndex];
 
@@ -459,6 +506,8 @@ export class TabPlayer {
       if (!primary.muted) {
         this._scheduleTrackAudio(primary, scaledTime, event, PRIMARY_GAIN, this.primaryIndex);
       }
+
+
 
       // Queue visual update for rAF-based sync (O(1) measureMap lookup)
       const idx = primary.currentIndex;

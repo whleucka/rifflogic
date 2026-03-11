@@ -27,7 +27,8 @@ let originalPrograms = new Map(); // playerTrackIndex -> { bank, program }
 // Whether user has overridden voice (null = use GP file programs)
 let voiceOverrideProgram = null;
 // When true, tab-player should skip FluidSynth and use fallback synth
-let bypassed = false;
+// Default to true so Karplus-Strong is used until user selects a FluidSynth voice
+let bypassed = true;
 
 /**
  * @returns {boolean} Whether FluidSynth is initialized and ready.
@@ -147,9 +148,15 @@ export function assignChannels(tracks) {
  * @param {number} velocity - 0-127
  */
 export function fluidNoteOn(playerTrackIndex, midi, velocity = 100) {
-  if (!ready) return;
+  if (!ready) {
+    console.warn('[FLUID] noteOn: not ready');
+    return;
+  }
   const ch = channelMap.get(playerTrackIndex);
-  if (ch === undefined) return;
+  if (ch === undefined) {
+    console.warn(`[FLUID] noteOn: no channel for track ${playerTrackIndex}, channelMap size=${channelMap.size}`);
+    return;
+  }
   synth.midiNoteOn(ch, midi, velocity);
 }
 
@@ -198,11 +205,13 @@ export function fluidAllNotesOff() {
  * @param {number|null} program - GM program number (0-127) or null to bypass
  */
 export function fluidSetVoiceProgram(program) {
+  console.log(`[FLUID] setVoiceProgram(${program}) - bypassed will be: ${program === null}`);
   voiceOverrideProgram = program;
 
   if (program === null) {
     // Bypass FluidSynth — tab-player will use Karplus-Strong fallback
     bypassed = true;
+    console.log('[FLUID] Bypassed - will use Karplus-Strong');
     if (ready) fluidAllNotesOff();
     return;
   }

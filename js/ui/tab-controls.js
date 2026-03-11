@@ -149,6 +149,8 @@ export function renderTabViewer(container) {
     } else if (VOICE_GM_PROGRAMS[voice] !== undefined) {
       // Soundfont voice — use FluidSynth with the matching GM program
       fluidSetVoiceProgram(VOICE_GM_PROGRAMS[voice]);
+      // Ensure channels are assigned when switching to FluidSynth
+      _assignFluidChannels();
     }
 
     // Also update synth-voice.js (for fretboard click playback)

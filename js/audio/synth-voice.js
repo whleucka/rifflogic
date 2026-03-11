@@ -17,6 +17,21 @@ let currentVoiceType = VOICE_TYPES.KARPLUS;
 let currentInstrument = null; // Loaded soundfont instrument
 let isLoading = false;
 
+// Debug: track note creation rate
+let _noteCount = 0;
+let _lastNoteCountTime = performance.now();
+function _trackNoteRate() {
+  _noteCount++;
+  const now = performance.now();
+  if (now - _lastNoteCountTime > 2000) {
+    const elapsed = (now - _lastNoteCountTime) / 1000;
+    const rate = _noteCount / elapsed;
+    console.log(`[SYNTH] Note rate: ${rate.toFixed(1)} notes/sec (${_noteCount} notes in ${elapsed.toFixed(1)}s)`);
+    _noteCount = 0;
+    _lastNoteCountTime = now;
+  }
+}
+
 // --- Karplus-Strong Synthesis (The "Original" Synth) ---
 const MAX_BUFFER_DURATION = 2.0;
 const bufferCache = new Map();
@@ -55,6 +70,7 @@ function getCachedKarplusBuffer(ctx, frequency, damping, brightness) {
 }
 
 function playKarplus(frequency, stringIndex, now, gainMult, sustainDur) {
+  _trackNoteRate();
   const ctx = getAudioContext();
   const output = getMasterOutput();
 
@@ -86,6 +102,13 @@ function playKarplus(frequency, stringIndex, now, gainMult, sustainDur) {
 
   source.start(now);
   source.stop(now + totalDur + 0.01);
+  
+  // Clean up nodes after playback to prevent accumulation
+  source.onended = () => {
+    source.disconnect();
+    body.disconnect();
+    env.disconnect();
+  };
 }
 
 // --- Soundfont Sampler (The "Pro" Voice) ---
