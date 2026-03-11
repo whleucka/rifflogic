@@ -4,7 +4,7 @@
 import express from 'express';
 import cors from 'cors';
 import { spawn } from 'child_process';
-import { createReadStream, existsSync, mkdirSync, unlinkSync, readdirSync, statSync } from 'fs';
+import { createReadStream, existsSync, mkdirSync, unlinkSync, readdirSync, statSync, promises as fsp } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -70,7 +70,7 @@ app.get('/api/youtube/audio-url/:videoId', async (req, res) => {
 });
 
 /**
- * Stream audio through server (for CORS issues with direct URLs)
+ * Stream audio through server with proper range request support
  * GET /api/youtube/stream/:videoId
  */
 app.get('/api/youtube/stream/:videoId', async (req, res) => {
@@ -82,27 +82,51 @@ app.get('/api/youtube/stream/:videoId', async (req, res) => {
 
   const cachedFile = join(CACHE_DIR, `${videoId}.mp3`);
 
-  // Serve from cache if exists
-  if (existsSync(cachedFile)) {
+  // Download if not cached
+  if (!existsSync(cachedFile)) {
+    console.log(`[DOWNLOAD] ${videoId}`);
+    try {
+      await downloadAudio(videoId, cachedFile);
+      cleanupCache();
+    } catch (err) {
+      console.error('Download error:', err.message);
+      return res.status(500).json({ error: 'Failed to download audio', details: err.message });
+    }
+  } else {
     console.log(`[CACHE HIT] ${videoId}`);
-    res.setHeader('Content-Type', 'audio/mpeg');
-    res.setHeader('Accept-Ranges', 'bytes');
-    return createReadStream(cachedFile).pipe(res);
   }
 
-  console.log(`[DOWNLOAD] ${videoId}`);
+  // Get file stats
+  const stat = await fsp.stat(cachedFile);
+  const fileSize = stat.size;
+  const range = req.headers.range;
 
-  // Download and cache
-  try {
-    await downloadAudio(videoId, cachedFile);
-    cleanupCache();
-    
-    res.setHeader('Content-Type', 'audio/mpeg');
-    res.setHeader('Accept-Ranges', 'bytes');
+  if (range) {
+    // Handle range request for seeking
+    const parts = range.replace(/bytes=/, '').split('-');
+    const start = parseInt(parts[0], 10);
+    const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+    const chunkSize = end - start + 1;
+
+    console.log(`[RANGE] ${videoId}: bytes ${start}-${end}/${fileSize}`);
+
+    res.writeHead(206, {
+      'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+      'Accept-Ranges': 'bytes',
+      'Content-Length': chunkSize,
+      'Content-Type': 'audio/mpeg',
+    });
+
+    createReadStream(cachedFile, { start, end }).pipe(res);
+  } else {
+    // Full file request
+    res.writeHead(200, {
+      'Content-Length': fileSize,
+      'Content-Type': 'audio/mpeg',
+      'Accept-Ranges': 'bytes',
+    });
+
     createReadStream(cachedFile).pipe(res);
-  } catch (err) {
-    console.error('Stream error:', err.message);
-    res.status(500).json({ error: 'Failed to stream audio', details: err.message });
   }
 });
 
