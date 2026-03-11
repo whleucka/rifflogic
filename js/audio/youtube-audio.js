@@ -132,13 +132,17 @@ export async function loadYouTubeAudio(videoId) {
  * @param {number} startTime - Start time in seconds
  */
 export function playYouTube(startTime = 0) {
-  if (!audioElement || !isReady) return;
+  if (!audioElement || !isReady) {
+    console.warn('[YouTube] playYouTube called but not ready');
+    return;
+  }
   
   const ctx = getAudioContext();
   if (ctx.state === 'suspended') {
     ctx.resume();
   }
   
+  console.log(`[YouTube] Setting currentTime to ${startTime}, then playing`);
   audioElement.currentTime = startTime;
   audioElement.play().catch(err => {
     console.warn('[YouTube] Play failed:', err.message);
