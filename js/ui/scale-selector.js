@@ -127,6 +127,7 @@ export function renderScaleSelector(container) {
     scaleSelect.value = '';
     cagedIndex = -1;
     updateCAGEDDisplay();
+    settings.set('scale', null);
     events.emit(SCALE_CLEAR);
   });
 
@@ -138,6 +139,9 @@ export function renderScaleSelector(container) {
       updateCAGEDDisplay();
       settings.set('scale', { root, type: scale });
       events.emit(SCALE_SELECT, { root, scale });
+    } else {
+      settings.set('scale', null);
+      events.emit(SCALE_CLEAR);
     }
   };
 

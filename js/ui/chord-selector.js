@@ -65,6 +65,7 @@ export function renderChordSelector(container) {
     voicingIndex = 0;
     renderChordDiagram(null, diagramContainer);
     updateNav();
+    settings.set('chord', null);
     events.emit(CHORD_CLEAR);
   });
 
@@ -167,6 +168,8 @@ export function renderChordSelector(container) {
       currentVoicing = null;
       renderChordDiagram(null, diagramContainer);
       updateNav();
+      settings.set('chord', null);
+      events.emit(CHORD_CLEAR);
       return;
     }
 

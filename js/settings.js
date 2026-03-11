@@ -9,8 +9,8 @@ const defaults = {
   tuning: null, // null means standard E
   view: 'scales',
   showAllNotes: false,
-  scale: { root: 'C', type: 'major' },
-  chord: { root: 'C', type: 'major' },
+  scale: null,
+  chord: null,
   tempo: 100,
   metronomeBpm: 80,
 };
