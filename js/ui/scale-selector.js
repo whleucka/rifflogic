@@ -5,6 +5,7 @@ import { SCALE_DISPLAY_NAMES, getCAGEDPositions, computeScaleMap, filterCAGEDPos
 import { TUNING, FRET_COUNT } from '../config.js';
 import { events, SCALE_SELECT, SCALE_CLEAR, CAGED_POSITION, SCALE_NOTE_ON, SCALE_NOTE_OFF } from '../events.js';
 import { playNote } from '../audio/synth-voice.js';
+import * as settings from '../settings.js';
 
 export function renderScaleSelector(container) {
   const group = document.createElement('div');
@@ -135,12 +136,22 @@ export function renderScaleSelector(container) {
     if (root && scale) {
       cagedIndex = -1;
       updateCAGEDDisplay();
+      settings.set('scale', { root, type: scale });
       events.emit(SCALE_SELECT, { root, scale });
     }
   };
 
   rootSelect.addEventListener('change', emitSelection);
   scaleSelect.addEventListener('change', emitSelection);
+
+  // Restore saved scale selection
+  const savedScale = settings.get('scale');
+  if (savedScale && savedScale.root && savedScale.type) {
+    rootSelect.value = savedScale.root;
+    scaleSelect.value = savedScale.type;
+    // Emit on next tick so fretboard is ready
+    setTimeout(() => emitSelection(), 0);
+  }
 
   row.appendChild(rootSelect);
   row.appendChild(scaleSelect);

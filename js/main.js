@@ -7,8 +7,9 @@ import { renderScaleSelector } from './ui/scale-selector.js';
 import { renderChordSelector } from './ui/chord-selector.js';
 import { renderChordPractice } from './ui/chord-practice.js';
 import { renderTabViewer } from './ui/tab-controls.js';
-import { renderToolbar, VIEW_CHANGE } from './ui/toolbar.js';
+import { renderToolbar, VIEW_CHANGE, setActiveView } from './ui/toolbar.js';
 import { events, TUNING_CHANGE } from './events.js';
+import * as settings from './settings.js';
 
 function init() {
   // Toolbar
@@ -70,7 +71,14 @@ function init() {
     scalesView.classList.toggle('hidden', view !== 'scales');
     chordsView.classList.toggle('hidden', view !== 'chords');
     tabsView.classList.toggle('hidden', view !== 'tabs');
+    settings.set('view', view);
   });
+
+  // Restore saved view
+  const savedView = settings.get('view');
+  if (savedView && savedView !== 'scales') {
+    setActiveView(savedView);
+  }
 }
 
 if (document.readyState === 'loading') {

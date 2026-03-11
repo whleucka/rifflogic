@@ -10,6 +10,10 @@ const VIEWS = [
   { id: 'tabs', label: 'Tab Viewer' },
 ];
 
+// Module-level reference for setActiveView
+let toolbarButtons = [];
+let currentActiveView = 'scales';
+
 export function renderToolbar(container) {
   const inner = document.createElement('div');
   inner.className = 'toolbar-inner';
@@ -21,17 +25,13 @@ export function renderToolbar(container) {
   const nav = document.createElement('nav');
   nav.className = 'toolbar-nav';
 
-  let activeView = 'scales';
-
-  const buttons = VIEWS.map(({ id, label }) => {
+  toolbarButtons = VIEWS.map(({ id, label }) => {
     const btn = document.createElement('button');
-    btn.className = 'toolbar-tab' + (id === activeView ? ' active' : '');
+    btn.className = 'toolbar-tab' + (id === currentActiveView ? ' active' : '');
     btn.textContent = label;
     btn.dataset.view = id;
     btn.addEventListener('click', () => {
-      activeView = id;
-      buttons.forEach(b => b.classList.toggle('active', b.dataset.view === id));
-      events.emit(VIEW_CHANGE, { view: id });
+      setActiveView(id);
     });
     nav.appendChild(btn);
     return btn;
@@ -43,6 +43,18 @@ export function renderToolbar(container) {
 
   // Emit initial view
   requestAnimationFrame(() => {
-    events.emit(VIEW_CHANGE, { view: activeView });
+    events.emit(VIEW_CHANGE, { view: currentActiveView });
   });
+}
+
+/**
+ * Programmatically set the active view
+ * @param {string} viewId - 'scales', 'chords', or 'tabs'
+ */
+export function setActiveView(viewId) {
+  if (!VIEWS.some(v => v.id === viewId)) return;
+  
+  currentActiveView = viewId;
+  toolbarButtons.forEach(b => b.classList.toggle('active', b.dataset.view === viewId));
+  events.emit(VIEW_CHANGE, { view: viewId });
 }

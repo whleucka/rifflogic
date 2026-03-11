@@ -1,6 +1,7 @@
 // Tab transport controls: play/pause/stop, tempo, loop, metronome
 
 import { buildButton, buildSlider } from './dom-helpers.js';
+import * as settings from '../settings.js';
 
 const SEEK_STEP = 5; // beats to skip on arrow key press
 
@@ -16,15 +17,19 @@ export function createTransport(deps) {
   const playBtn = buildButton('\u25B6 Play', 'toggle-btn', { disabled: true });
   const stopBtn = buildButton('\u25A0 Stop', 'toggle-btn', { disabled: true });
 
-  // --- Tempo slider ---
+  // --- Tempo slider --- load saved value
+  const savedTempo = settings.get('tempo');
   const { wrap: tempoWrap, slider: tempoSlider, valueSpan: tempoValue } = buildSlider({
     className: 'bpm-control',
     label: 'Speed',
     min: 25,
     max: 150,
-    value: 100,
-    valueText: '100%',
+    value: savedTempo,
+    valueText: savedTempo + '%',
   });
+  
+  // Apply saved tempo on creation
+  player.setTempoScale(savedTempo / 100);
 
   // --- Loop controls ---
   const loopABtn = buildButton('A', 'caged-btn', { title: 'Set loop start', disabled: true });
@@ -143,6 +148,7 @@ export function createTransport(deps) {
     const pct = parseInt(tempoSlider.value);
     tempoValue.textContent = pct + '%';
     player.setTempoScale(pct / 100);
+    settings.set('tempo', pct);
   });
 
   loopABtn.addEventListener('click', () => {

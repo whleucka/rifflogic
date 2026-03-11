@@ -5,6 +5,7 @@ import { CHORD_VOICINGS, QUALITY_NAMES, getChordVoicings, chordToFretboardMap } 
 import { events, CHORD_SELECT, CHORD_CLEAR, CHORD_NOTE_ON, CHORD_NOTE_OFF } from '../events.js';
 import { renderChordDiagram } from './chord-diagram.js';
 import { strumChord } from '../audio/strum.js';
+import * as settings from '../settings.js';
 
 export function renderChordSelector(container) {
   const group = document.createElement('div');
@@ -169,6 +170,9 @@ export function renderChordSelector(container) {
       return;
     }
 
+    // Save chord selection
+    settings.set('chord', { root, type: quality });
+
     let voicings = getChordVoicings(root, quality);
     if (activeCategory) {
       voicings = voicings.filter(v => v.category === activeCategory);
@@ -185,6 +189,15 @@ export function renderChordSelector(container) {
       events.emit(CHORD_CLEAR);
     }
     updateNav();
+  }
+
+  // Restore saved chord selection
+  const savedChord = settings.get('chord');
+  if (savedChord && savedChord.root && savedChord.type) {
+    rootSelect.value = savedChord.root;
+    qualitySelect.value = savedChord.type;
+    // Update on next tick so DOM is ready
+    setTimeout(() => updateSelection(), 0);
   }
 
   function selectVoicing(voicing) {

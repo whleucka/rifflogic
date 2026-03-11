@@ -5,6 +5,7 @@ import { METRONOME } from '../config.js';
 import { Metronome } from '../audio/metronome.js';
 import { strumChord } from '../audio/strum.js';
 import { events, CHORD_SELECT, CHORD_CLEAR, METRONOME_TICK } from '../events.js';
+import * as settings from '../settings.js';
 
 export function renderChordPractice(container) {
   const group = document.createElement('div');
@@ -26,7 +27,8 @@ export function renderChordPractice(container) {
     progSelect.appendChild(opt);
   });
 
-  // BPM
+  // BPM - load saved value
+  const savedBpm = settings.get('metronomeBpm');
   const bpmWrap = document.createElement('div');
   bpmWrap.className = 'bpm-control';
   const bpmLabel = document.createElement('label');
@@ -35,12 +37,13 @@ export function renderChordPractice(container) {
   bpmInput.type = 'range';
   bpmInput.min = METRONOME.minBpm;
   bpmInput.max = METRONOME.maxBpm;
-  bpmInput.value = METRONOME.defaultBpm;
+  bpmInput.value = savedBpm;
   const bpmValue = document.createElement('span');
   bpmValue.className = 'bpm-value';
-  bpmValue.textContent = METRONOME.defaultBpm;
+  bpmValue.textContent = savedBpm;
   bpmInput.addEventListener('input', () => {
     bpmValue.textContent = bpmInput.value;
+    settings.set('metronomeBpm', parseInt(bpmInput.value));
     if (metronome.running) {
       metronome.setBpm(parseInt(bpmInput.value));
     }
