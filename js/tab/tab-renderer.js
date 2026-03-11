@@ -130,21 +130,8 @@ export class TabRenderer {
     const timeline = this.track.timeline;
     const C = TAB_CONSTANTS;
 
-    // Find which measure contains this time
-    let measure = null;
-    for (let i = 0; i < measures.length; i++) {
-      const m = measures[i];
-      // Use <= for endTime to handle measure boundaries, or find next measure if past end
-      if (playbackTime >= m.startTime - 0.001 && playbackTime <= m.endTime + 0.001) {
-        measure = m;
-        break;
-      }
-      // If we're past this measure but before the next, stay on this measure
-      if (playbackTime > m.endTime && (i === measures.length - 1 || playbackTime < measures[i + 1].startTime)) {
-        measure = m;
-        break;
-      }
-    }
+    // Binary search for the measure containing this time
+    const measure = this._findMeasureAtTime(playbackTime);
     if (!measure) return;
 
     // Find current beat index for note highlighting
@@ -451,5 +438,38 @@ export class TabRenderer {
     if (pos.y < scrollY + TAB_CONSTANTS.scrollPaddingTop || pos.y > scrollY + wrapHeight - TAB_CONSTANTS.scrollPaddingBottom) {
       this.wrap.scrollTo({ top: Math.max(0, pos.y - TAB_CONSTANTS.scrollTargetOffset), behavior: 'smooth' });
     }
+  }
+
+  /**
+   * Binary search to find the measure containing a given time.
+   * O(log n) instead of O(n).
+   */
+  _findMeasureAtTime(time) {
+    const measures = this.track.measures;
+    if (!measures || measures.length === 0) return null;
+
+    let lo = 0;
+    let hi = measures.length - 1;
+
+    while (lo <= hi) {
+      const mid = (lo + hi) >>> 1;
+      const m = measures[mid];
+
+      if (time < m.startTime - 0.001) {
+        hi = mid - 1;
+      } else if (time > m.endTime + 0.001) {
+        lo = mid + 1;
+      } else {
+        // Found it
+        return m;
+      }
+    }
+
+    // Clamp to last measure if past end
+    if (lo >= measures.length) {
+      return measures[measures.length - 1];
+    }
+
+    return null;
   }
 }
