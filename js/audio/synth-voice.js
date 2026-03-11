@@ -10,8 +10,29 @@ export const VOICE_TYPES = {
   ELECTRIC_CLEAN: 'electric_guitar_clean',
   ELECTRIC_MUTED: 'electric_guitar_muted',
   OVERDRIVEN: 'overdriven_guitar',
-  DISTORTION: 'distortion_guitar'
+  DISTORTION: 'distortion_guitar',
+  // YouTube backing tracks use prefix: youtube:VIDEO_ID
+  YOUTUBE_PREFIX: 'youtube:',
 };
+
+/**
+ * Check if a voice type is a YouTube backing track.
+ * @param {string} type 
+ * @returns {boolean}
+ */
+export function isYouTubeVoice(type) {
+  return type && type.startsWith(VOICE_TYPES.YOUTUBE_PREFIX);
+}
+
+/**
+ * Extract video ID from a YouTube voice type.
+ * @param {string} type 
+ * @returns {string|null}
+ */
+export function getYouTubeVideoId(type) {
+  if (!isYouTubeVoice(type)) return null;
+  return type.slice(VOICE_TYPES.YOUTUBE_PREFIX.length);
+}
 
 let currentVoiceType = VOICE_TYPES.KARPLUS;
 let currentInstrument = null; // Loaded soundfont instrument

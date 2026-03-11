@@ -3,3 +3,7 @@ tabs/
 
 # Large soundfont files
 assets/*.sf2
+
+# YouTube proxy server
+server/node_modules/
+server/.cache/

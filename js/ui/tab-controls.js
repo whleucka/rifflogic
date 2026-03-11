@@ -2,8 +2,13 @@
 
 import { TabRenderer } from '../tab/tab-renderer.js';
 import { TabPlayer } from '../tab/tab-player.js';
-import { setVoiceType, VOICE_TYPES } from '../audio/synth-voice.js';
+import { setVoiceType, VOICE_TYPES, isYouTubeVoice, getYouTubeVideoId } from '../audio/synth-voice.js';
 import { initFluidSynth, isFluidReady, isFluidLoading, assignChannels, fluidSetVoiceProgram, fluidRestoreOriginalPrograms } from '../audio/fluid-synth.js';
+import {
+  searchYouTube, isProxyAvailable, loadYouTubeAudio, playYouTube,
+  pauseYouTube, stopYouTube, seekYouTube, setYouTubePlaybackRate,
+  isYouTubeReady, unloadYouTube
+} from '../audio/youtube-audio.js';
 import { events, TAB_LOADED, TAB_BEAT_ON, TAB_POSITION, TAB_STOP, TUNING_CHANGE } from '../events.js';
 import { VIEW_CHANGE } from './toolbar.js';
 import { buildSelect, buildButton } from './dom-helpers.js';
@@ -27,6 +32,7 @@ export function renderTabViewer(container) {
   let score = null;
   let allTrackData = [];
   let selectedTrackIndex = null;
+  let youtubeVoiceActive = false; // Track if YouTube backing is selected
 
   // --- Header ---
   const header = document.createElement('div');
@@ -143,22 +149,75 @@ export function renderTabViewer(container) {
 
     const voice = voiceSelect.value;
 
-    if (voice === VOICE_TYPES.KARPLUS) {
-      // "Default Synth" — bypass FluidSynth, use Karplus-Strong for tab playback
+    // Check if YouTube backing track selected
+    if (isYouTubeVoice(voice)) {
+      const videoId = getYouTubeVideoId(voice);
+      youtubeVoiceActive = true;
+      
+      // Mute the synth when using YouTube backing
       fluidSetVoiceProgram(null);
-    } else if (VOICE_GM_PROGRAMS[voice] !== undefined) {
-      // Soundfont voice — use FluidSynth with the matching GM program
-      fluidSetVoiceProgram(VOICE_GM_PROGRAMS[voice]);
-      // Ensure channels are assigned when switching to FluidSynth
-      _assignFluidChannels();
-    }
+      
+      try {
+        await loadYouTubeAudio(videoId);
+        songInfo.textContent = `${score.title} — ${score.artist} — YouTube ready`;
+      } catch (err) {
+        console.error('Failed to load YouTube audio:', err);
+        songInfo.textContent = `${score.title} — ${score.artist} — YouTube failed`;
+      }
+    } else {
+      // Standard synth voice
+      youtubeVoiceActive = false;
+      unloadYouTube();
 
-    // Also update synth-voice.js (for fretboard click playback)
-    await setVoiceType(voice);
+      if (voice === VOICE_TYPES.KARPLUS) {
+        // "Default Synth" — bypass FluidSynth, use Karplus-Strong for tab playback
+        fluidSetVoiceProgram(null);
+      } else if (VOICE_GM_PROGRAMS[voice] !== undefined) {
+        // Soundfont voice — use FluidSynth with the matching GM program
+        fluidSetVoiceProgram(VOICE_GM_PROGRAMS[voice]);
+        // Ensure channels are assigned when switching to FluidSynth
+        _assignFluidChannels();
+      }
+
+      // Also update synth-voice.js (for fretboard click playback)
+      await setVoiceType(voice);
+    }
 
     selectedOption.textContent = oldLabel;
     voiceSelect.disabled = false;
+
+    // Update player callbacks based on YouTube state
+    _updateYouTubeCallbacks();
   });
+
+  /**
+   * Set up or clear YouTube audio sync callbacks on the player.
+   */
+  function _updateYouTubeCallbacks() {
+    if (youtubeVoiceActive && isYouTubeReady()) {
+      player.setExternalAudioCallbacks({
+        onPlay: (startTime) => {
+          // YouTube time = tab time / tempoScale (since tab adjusts for tempo)
+          playYouTube(startTime);
+          setYouTubePlaybackRate(player.tempoScale);
+        },
+        onPause: () => {
+          pauseYouTube();
+        },
+        onStop: () => {
+          stopYouTube();
+        },
+        onSeek: (time) => {
+          seekYouTube(time);
+        },
+        onTempoChange: (scale) => {
+          setYouTubePlaybackRate(scale);
+        },
+      });
+    } else {
+      player.clearExternalAudioCallbacks();
+    }
+  }
 
   trackSelect.addEventListener('change', () => {
     const idx = parseInt(trackSelect.value);
@@ -278,6 +337,95 @@ export function renderTabViewer(container) {
 
     // Initialize FluidSynth lazily on first file load
     _ensureFluidSynth();
+
+    // Search YouTube for backing tracks (async, updates dropdown when ready)
+    _searchYouTubeBacking();
+  }
+
+  /**
+   * Search YouTube for backing tracks matching the current song.
+   * Results are added to the voice selector asynchronously.
+   */
+  async function _searchYouTubeBacking() {
+    if (!score || !score.artist || !score.title) return;
+
+    // Check if proxy server is available
+    const proxyUp = await isProxyAvailable();
+    if (!proxyUp) {
+      console.log('[YouTube] Proxy server not available');
+      return;
+    }
+
+    // Remove any existing YouTube options
+    _clearYouTubeOptions();
+
+    // Add separator
+    const separator = document.createElement('option');
+    separator.disabled = true;
+    separator.textContent = '── YouTube Backing ──';
+    separator.className = 'youtube-separator';
+    voiceSelect.appendChild(separator);
+
+    // Add loading placeholder
+    const loadingOpt = document.createElement('option');
+    loadingOpt.disabled = true;
+    loadingOpt.textContent = 'Searching...';
+    loadingOpt.className = 'youtube-loading';
+    voiceSelect.appendChild(loadingOpt);
+
+    try {
+      const results = await searchYouTube(score.artist, score.title, 5);
+      
+      // Remove loading placeholder
+      const loading = voiceSelect.querySelector('.youtube-loading');
+      if (loading) loading.remove();
+
+      if (results.length === 0) {
+        const noResults = document.createElement('option');
+        noResults.disabled = true;
+        noResults.textContent = 'No results found';
+        voiceSelect.appendChild(noResults);
+        return;
+      }
+
+      // Add YouTube results
+      for (const result of results) {
+        const opt = document.createElement('option');
+        opt.value = `${VOICE_TYPES.YOUTUBE_PREFIX}${result.id}`;
+        opt.className = 'youtube-option';
+        
+        // Format: "Title (Channel) - 3:45"
+        const duration = _formatDuration(result.duration);
+        const title = result.title.length > 40 
+          ? result.title.slice(0, 37) + '...' 
+          : result.title;
+        opt.textContent = `${title} (${duration})`;
+        opt.title = `${result.title}\n${result.channel}`;
+        
+        voiceSelect.appendChild(opt);
+      }
+
+      console.log(`[YouTube] Found ${results.length} results for "${score.artist} - ${score.title}"`);
+    } catch (err) {
+      console.error('[YouTube] Search failed:', err);
+      const loading = voiceSelect.querySelector('.youtube-loading');
+      if (loading) {
+        loading.textContent = 'Search failed';
+      }
+    }
+  }
+
+  function _clearYouTubeOptions() {
+    // Remove all YouTube-related options
+    const toRemove = voiceSelect.querySelectorAll('.youtube-separator, .youtube-loading, .youtube-option');
+    toRemove.forEach(opt => opt.remove());
+  }
+
+  function _formatDuration(seconds) {
+    if (!seconds) return '??:??';
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   }
 
   async function _ensureFluidSynth() {

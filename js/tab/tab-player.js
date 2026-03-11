@@ -43,6 +43,36 @@ export class TabPlayer {
     this._pendingVisuals = []; // sorted by scheduledTime
     this._pendingFluidAudio = []; // precision audio queue for FluidSynth
     this._fluidInterval = null;
+
+    // External audio sync callbacks (for YouTube backing tracks)
+    this._onPlay = null;   // (startTime: number) => void
+    this._onPause = null;  // () => void
+    this._onStop = null;   // () => void
+    this._onSeek = null;   // (time: number) => void
+    this._onTempoChange = null; // (scale: number) => void
+  }
+
+  /**
+   * Set callbacks for external audio sync (YouTube backing tracks).
+   * @param {object} callbacks - { onPlay, onPause, onStop, onSeek, onTempoChange }
+   */
+  setExternalAudioCallbacks(callbacks) {
+    this._onPlay = callbacks.onPlay || null;
+    this._onPause = callbacks.onPause || null;
+    this._onStop = callbacks.onStop || null;
+    this._onSeek = callbacks.onSeek || null;
+    this._onTempoChange = callbacks.onTempoChange || null;
+  }
+
+  /**
+   * Clear external audio callbacks.
+   */
+  clearExternalAudioCallbacks() {
+    this._onPlay = null;
+    this._onPause = null;
+    this._onStop = null;
+    this._onSeek = null;
+    this._onTempoChange = null;
   }
 
   /** Primary track shortcuts */
@@ -126,6 +156,9 @@ export class TabPlayer {
     this.schedulerInterval = setInterval(() => this._scheduler(), SCHEDULE_INTERVAL_MS);
     this._startVisualLoop();
     if (isFluidReady()) this._startFluidInterval();
+
+    // Notify external audio (YouTube)
+    if (this._onPlay) this._onPlay(eventTime);
   }
 
   pause() {
@@ -137,6 +170,9 @@ export class TabPlayer {
     this._pendingFluidAudio = [];
     this._stopFluidInterval();
     if (isFluidReady()) fluidAllNotesOff();
+
+    // Notify external audio (YouTube)
+    if (this._onPause) this._onPause();
   }
 
   resume() {
@@ -159,6 +195,9 @@ export class TabPlayer {
     this.schedulerInterval = setInterval(() => this._scheduler(), SCHEDULE_INTERVAL_MS);
     this._startVisualLoop();
     if (isFluidReady()) this._startFluidInterval();
+
+    // Notify external audio (YouTube)
+    if (this._onPlay) this._onPlay(eventTime);
   }
 
   stop() {
@@ -171,6 +210,9 @@ export class TabPlayer {
     for (const t of this.tracks) t.currentIndex = 0;
     if (isFluidReady()) fluidAllNotesOff();
     events.emit(TAB_STOP);
+
+    // Notify external audio (YouTube)
+    if (this._onStop) this._onStop();
   }
 
   /**
@@ -236,6 +278,9 @@ export class TabPlayer {
     } else {
       this.tempoScale = scale;
     }
+
+    // Notify external audio (YouTube)
+    if (this._onTempoChange) this._onTempoChange(scale);
   }
 
   setLoop(a, b) {
@@ -258,6 +303,9 @@ export class TabPlayer {
       }
     }
     this._syncMetronome(eventTime);
+
+    // Notify external audio (YouTube)
+    if (this._onSeek) this._onSeek(eventTime);
   }
 
   // --- Internal helpers ---
