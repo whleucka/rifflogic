@@ -212,10 +212,19 @@ export function renderTabViewer(container) {
     _updateYouTubeCallbacks();
   });
 
-  // YouTube offset slider
+  // YouTube offset slider - adjusts in real-time during playback
   ytOffsetSlider.addEventListener('input', () => {
     youtubeOffset = parseFloat(ytOffsetSlider.value);
     ytOffsetValue.textContent = `${youtubeOffset.toFixed(1)}s`;
+    
+    // If playing, re-sync YouTube to current position with new offset
+    if (player.state === 'playing' && isYouTubeReady()) {
+      const currentTime = player.getPlaybackTime();
+      if (currentTime >= 0) {
+        const ytTime = Math.max(0, currentTime + youtubeOffset);
+        seekYouTube(ytTime);
+      }
+    }
   });
 
   /**

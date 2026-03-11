@@ -46,6 +46,8 @@ export class TabRenderer {
     this._lastHighlightIndex = -1;
     this._lastScrollSystem = null;
     this._lastMasterBarIndex = -1;
+    this._lastHighlightPos = null;
+    this._needsFullOverlayRedraw = true;
 
     // Cached theme colors
     this._colors = null;
@@ -59,6 +61,7 @@ export class TabRenderer {
           this._refreshColors();
           this._doLayout();
           this._renderStatic();
+          this._needsFullOverlayRedraw = true;
           this._renderOverlay();
         }
       }, 200);
@@ -86,6 +89,7 @@ export class TabRenderer {
     if (this.track) {
       this._doLayout();
       this._renderStatic();
+      this._needsFullOverlayRedraw = true;
       this._renderOverlay();
     }
   }
@@ -104,6 +108,7 @@ export class TabRenderer {
     this._doLayout();
     this._cacheSystemRefs(); // re-cache after layout
     this._renderStatic();
+    this._needsFullOverlayRedraw = true;
     this._renderOverlay();
     this.cursorEl.style.display = 'none';
   }
@@ -113,6 +118,7 @@ export class TabRenderer {
     if (this.cursorIndex === index) return;
     this.cursorIndex = index;
     this.cursorEl.style.display = 'none';
+    this._needsFullOverlayRedraw = true;
     this._renderOverlay();
     this._scrollToCursor();
   }
