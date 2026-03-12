@@ -348,6 +348,10 @@ body.tabs-focused .tab-controls-row {
   margin-bottom: 0.5rem;
 }
 
+body.tabs-focused .tab-controls-row:first-of-type {
+  margin-top: 0.5rem;
+}
+
 body.tabs-focused .tab-controls-row-transport {
   margin-top: 0;
   margin-bottom: 0.5rem;
@@ -369,6 +373,15 @@ body.tabs-focused .tab-mixer {
 /* Adjust canvas container to account for floating HUD */
 body.tabs-focused .tab-canvas-container {
   padding-bottom: 140px; /* Space for HUD */
+  transition: padding-bottom 0.3s ease;
+}
+
+body.tabs-focused.hud-hidden .tab-canvas-container {
+  padding-bottom: 0;
+}
+
+body.tabs-focused .tab-viewer-group {
+  max-width: none;
 }
 
 /* HUD toggle button (top-right corner) */
@@ -431,4 +444,10 @@ body.tabs-focused .tab-exit-btn {
 .tab-exit-btn:hover {
   background: rgba(40, 40, 60, 0.95);
   color: var(--text-primary);
+}
+
+/* Smooth fade for buttons during playback */
+.tab-exit-btn,
+.tab-hud-toggle {
+  transition: all 0.3s ease, opacity 0.3s ease;
 }

@@ -344,18 +344,32 @@ export function renderTabViewer(container) {
   let isFocusedMode = false;
   let fretboardVisible = false;
 
+  // Reference to original fretboard container
+  const originalFretboardContainer = document.getElementById('fretboard-container');
+
+  function moveFretboardToOverlay() {
+    // Clear overlay first
+    fretboardOverlay.innerHTML = '';
+    // Move current fretboard SVG to overlay
+    const svg = originalFretboardContainer.querySelector('.fretboard-svg');
+    if (svg) {
+      fretboardOverlay.appendChild(svg);
+    }
+  }
+
+  function moveFretboardBack() {
+    // Move fretboard from overlay back to container
+    const svg = fretboardOverlay.querySelector('.fretboard-svg');
+    if (svg) {
+      originalFretboardContainer.appendChild(svg);
+    }
+  }
+
   function enterFocusedMode() {
     isFocusedMode = true;
     document.body.classList.add('tabs-focused');
     window.dispatchEvent(new Event('resize'));
-    
-    // Clone fretboard into overlay
-    const originalFretboard = document.querySelector('#fretboard-container .fretboard-svg');
-    if (originalFretboard) {
-      fretboardOverlay.innerHTML = '';
-      const clone = originalFretboard.cloneNode(true);
-      fretboardOverlay.appendChild(clone);
-    }
+    moveFretboardToOverlay();
   }
 
   function exitFocusedMode() {
@@ -365,10 +379,19 @@ export function renderTabViewer(container) {
     document.body.classList.remove('tabs-focused');
     fretboardOverlay.classList.remove('visible');
     hudToggle.classList.remove('active');
+    moveFretboardBack();
     window.dispatchEvent(new Event('resize'));
     // Switch back to scales view
     setActiveView('scales');
   }
+
+  // When tuning changes while in focused mode, move the new fretboard to overlay
+  events.on(TUNING_CHANGE, () => {
+    if (isFocusedMode) {
+      // Small delay to let main.js create the new fretboard first
+      setTimeout(moveFretboardToOverlay, 10);
+    }
+  });
 
   function toggleFretboard() {
     fretboardVisible = !fretboardVisible;
@@ -448,16 +471,67 @@ export function renderTabViewer(container) {
     }
   }
 
+  function hideHud() {
+    document.body.classList.add('hud-hidden');
+    header.classList.add('hud-hidden');
+    exitBtn.style.opacity = '0';
+    hudToggle.style.opacity = '0';
+  }
+
+  function showHud() {
+    document.body.classList.remove('hud-hidden');
+    header.classList.remove('hud-hidden');
+    exitBtn.style.opacity = '';
+    hudToggle.style.opacity = '';
+  }
+
   events.on(TAB_BEAT_ON, () => {
     // Start smooth cursor on first beat of playback
     startSmoothCursor();
+    // Auto-hide HUD during playback (synth or YouTube)
+    if (isFocusedMode) {
+      hideHud();
+    }
   });
 
   events.on(TAB_STOP, () => {
     stopSmoothCursor();
     renderer.clearCursor();
     transport.actions.onPlaybackStopped();
+    // Show HUD when playback stops
+    if (isFocusedMode) {
+      showHud();
+    }
   });
+
+  // Show HUD on mouse move during playback, and always when paused/stopped
+  let hudTimeout = null;
+  
+  function checkHudVisibility() {
+    if (!isFocusedMode) return;
+    if (player.state !== 'playing') {
+      showHud();
+      clearTimeout(hudTimeout);
+    }
+  }
+  
+  document.addEventListener('mousemove', () => {
+    if (!isFocusedMode) return;
+    
+    showHud();
+    
+    clearTimeout(hudTimeout);
+    if (player.state === 'playing') {
+      hudTimeout = setTimeout(() => {
+        if (player.state === 'playing') {
+          hideHud();
+        }
+      }, 2000);
+    }
+  });
+  
+  // Check HUD visibility periodically (catches pause)
+  setInterval(checkHudVisibility, 200);
 
   events.on(TAB_POSITION, ({ masterBarIndex, totalBars }) => {
     posDisplay.textContent = `Bar ${masterBarIndex + 1} / ${totalBars}`;

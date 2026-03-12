@@ -106,6 +106,10 @@ body.tabs-focused #view-tabs {
   max-width: none;
 }
 
+body.tabs-focused #tab-container {
+  max-width: none;
+}
+
 body.tabs-focused .tab-viewer-group {
   max-width: none;
   border-radius: 0;
@@ -114,10 +118,12 @@ body.tabs-focused .tab-viewer-group {
 body.tabs-focused .tab-canvas-container {
   border: none;
   border-radius: 0;
+  max-width: none;
+  width: 100%;
 }
 
 /* Floating fretboard overlay */
-body.tabs-focused .fretboard-overlay {
+.fretboard-overlay {
   position: fixed;
   top: 0;
   left: 0;
@@ -126,17 +132,25 @@ body.tabs-focused .fretboard-overlay {
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-  padding: 0.5rem 0;
+  padding: 0.75rem 1rem;
   transform: translateY(-100%);
   transition: transform 0.3s ease;
+  display: none;
+  overflow-x: auto;
 }
 
-body.tabs-focused .fretboard-overlay.visible {
+body.tabs-focused .fretboard-overlay {
+  display: block;
+}
+
+.fretboard-overlay.visible {
   transform: translateY(0);
 }
 
-body.tabs-focused .fretboard-overlay .fretboard-svg {
-  max-height: 120px;
+.fretboard-overlay .fretboard-svg {
+  max-height: 140px;
+  width: 100%;
+  min-width: 1200px;
 }
 
 #fretboard-container {
