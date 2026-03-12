@@ -14,7 +14,8 @@ export function drawHeader(ctx, c, name, artist, totalWidth) {
   // Title
   if (name) {
     ctx.fillStyle = c.gold;
-    ctx.font = `bold ${C.titleFontSize}px serif`;
+    // Using Righteous (available from index.html) for a fancier title
+    ctx.font = `500 ${C.titleFontSize}px 'Righteous', cursive`;
     ctx.textAlign = 'center';
     ctx.fillText(name.toUpperCase(), centerX, 35);
   }
@@ -22,7 +23,8 @@ export function drawHeader(ctx, c, name, artist, totalWidth) {
   // Artist
   if (artist) {
     ctx.fillStyle = c.text;
-    ctx.font = `italic ${C.artistFontSize}px sans-serif`;
+    // Using Inter (available from index.html) for a cleaner artist label
+    ctx.font = `italic 600 ${C.artistFontSize}px 'Inter', sans-serif`;
     ctx.fillText(artist, centerX, 60);
   }
 }

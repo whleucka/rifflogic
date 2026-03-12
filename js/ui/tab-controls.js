@@ -33,17 +33,18 @@ export function renderTabViewer(container) {
   let allTrackData = [];
   let selectedTrackIndex = null;
   let youtubeVoiceActive = false; // Track if YouTube backing is selected
+  let isFocusedMode = false; // Whether we're in the "tabs-focused" mode
+
+  // --- HUD Management State ---
+  let hudTimeout = null;
+  let lastMouseMove = 0;
+  let lastPlayerState = 'stopped';
+  const MOUSE_THROTTLE = 100; // ms
+  const HUD_HIDE_DELAY = 2500; // ms
 
   // --- Header ---
   const header = document.createElement('div');
   header.className = 'control-group tab-header';
-
-  const titleRow = document.createElement('div');
-  titleRow.className = 'tab-title-row';
-  titleRow.innerHTML = '<h3 style="margin:0">Tab Viewer</h3>';
-
-  const titleControls = document.createElement('div');
-  titleControls.className = 'tab-title-controls';
 
   // --- Mixer ---
   const mixer = createMixer({
@@ -53,10 +54,6 @@ export function renderTabViewer(container) {
       selectTrack(trackIndex);
     },
   });
-
-  titleControls.appendChild(mixer.mixerToggle);
-  titleRow.appendChild(titleControls);
-  header.appendChild(titleRow);
 
   // --- Floating UI elements (for tabs-focused mode) ---
   const exitBtn = document.createElement('button');
@@ -73,7 +70,7 @@ export function renderTabViewer(container) {
   const fretboardOverlay = document.createElement('div');
   fretboardOverlay.className = 'fretboard-overlay';
 
-  // --- Row 1: File + Track + Bars/Line + Voice ---
+  // --- Row 1: File + Track + Mixer + Voice + Offset ---
   const row1 = document.createElement('div');
   row1.className = 'tab-controls-row';
 
@@ -82,11 +79,13 @@ export function renderTabViewer(container) {
   });
 
   const trackSelect = buildSelect({
+    className: 'toggle-btn tab-track-select',
     placeholder: 'Track',
     disabled: true,
   });
 
   const voiceSelect = buildSelect({
+    className: 'toggle-btn tab-voice-select',
     options: [
       { value: VOICE_TYPES.KARPLUS, label: 'Default Synth' },
       { value: VOICE_TYPES.ACOUSTIC, label: 'Acoustic Guitar' },
@@ -98,7 +97,7 @@ export function renderTabViewer(container) {
   });
 
   // YouTube sync offset control (hidden by default)
-  const { wrap: ytOffsetWrap, slider: ytOffsetSlider, valueSpan: ytOffsetValue } = buildSlider({
+  const { wrap: ytOffsetWrap, slider: ytOffsetSlider, valueSpan: ytOffsetValue, resetBtn: ytOffsetReset } = buildSlider({
     className: 'yt-offset-control',
     label: 'YT Offset',
     min: -30,
@@ -106,14 +105,42 @@ export function renderTabViewer(container) {
     value: 0,
     step: 0.1,
     valueText: '0.0s',
+    showReset: true,
   });
   ytOffsetWrap.style.display = 'none';
   
   let youtubeOffset = 0; // seconds to delay YouTube audio start
 
+  // YouTube reset button
+  if (ytOffsetReset) {
+    ytOffsetReset.addEventListener('click', () => {
+      youtubeOffset = 0;
+      ytOffsetSlider.value = "0";
+      ytOffsetValue.textContent = "0.0s";
+      _saveYtOffset();
+      
+      // If playing, re-sync YouTube
+      if (player.state === 'playing' && isYouTubeReady()) {
+        _clearYtDelayTimeout();
+        const currentTime = player.getPlaybackTime();
+        if (currentTime >= 0) {
+          const ytTime = currentTime + youtubeOffset;
+          if (ytTime >= 0) {
+            seekYouTube(ytTime);
+            playYouTube(ytTime);
+          } else {
+            pauseYouTube();
+            _startDelayTimer(Math.abs(ytTime));
+          }
+        }
+      }
+    });
+  }
+
   row1.appendChild(fileLoader.fileBtn);
   row1.appendChild(fileLoader.fileInput);
   row1.appendChild(trackSelect);
+  row1.appendChild(mixer.mixerToggle); // Mixer button moved to row1
   row1.appendChild(voiceSelect);
   row1.appendChild(ytOffsetWrap);
   header.appendChild(row1);
@@ -134,18 +161,18 @@ export function renderTabViewer(container) {
   row2.appendChild(transport.elements.metroBtn);
   header.appendChild(row2);
 
-  // --- Row 3: Position + Song Info ---
+  // --- Row 3: Position ---
   const posDisplay = document.createElement('span');
   posDisplay.className = 'tab-position';
   posDisplay.textContent = '';
 
   const songInfo = document.createElement('span');
   songInfo.className = 'tab-song-info';
+  songInfo.style.display = 'none'; // Hide from view
   songInfo.textContent = '';
 
   const infoRow = document.createElement('div');
   infoRow.className = 'tab-info-row';
-  infoRow.appendChild(songInfo);
   infoRow.appendChild(posDisplay);
   header.appendChild(infoRow);
 
@@ -192,6 +219,9 @@ export function renderTabViewer(container) {
       try {
         await loadYouTubeAudio(videoId);
         songInfo.textContent = `${score.title} — ${score.artist} — YouTube ready`;
+        
+        // Load saved offset for this song/video
+        _loadYtOffset();
       } catch (err) {
         console.error('Failed to load YouTube audio:', err);
         songInfo.textContent = `${score.title} — ${score.artist} — YouTube failed`;
@@ -204,6 +234,9 @@ export function renderTabViewer(container) {
       youtubeVoiceActive = false;
       player.setSynthMuted(false);
       unloadYouTube();
+      
+      // Reset UI offset display when leaving YouTube voice
+      _loadYtOffset();
 
       if (voice === VOICE_TYPES.KARPLUS) {
         // "Default Synth" — bypass FluidSynth, use Karplus-Strong for tab playback
@@ -233,6 +266,9 @@ export function renderTabViewer(container) {
   ytOffsetSlider.addEventListener('input', () => {
     youtubeOffset = parseFloat(ytOffsetSlider.value);
     ytOffsetValue.textContent = `${youtubeOffset.toFixed(1)}s`;
+    
+    // Save to localStorage when offset changes
+    _saveYtOffset();
     
     // If playing, re-sync YouTube to current position with new offset
     if (player.state === 'playing' && isYouTubeReady()) {
@@ -341,7 +377,6 @@ export function renderTabViewer(container) {
   });
 
   // --- Tabs-focused mode ---
-  let isFocusedMode = false;
   let fretboardVisible = false;
 
   // Reference to original fretboard container
@@ -367,6 +402,7 @@ export function renderTabViewer(container) {
 
   function enterFocusedMode() {
     isFocusedMode = true;
+    showHud();
     document.body.classList.add('tabs-focused');
     window.dispatchEvent(new Event('resize'));
     moveFretboardToOverlay();
@@ -376,6 +412,7 @@ export function renderTabViewer(container) {
     if (!isFocusedMode) return;
     isFocusedMode = false;
     fretboardVisible = false;
+    showHud();
     document.body.classList.remove('tabs-focused');
     fretboardOverlay.classList.remove('visible');
     hudToggle.classList.remove('active');
@@ -488,8 +525,10 @@ export function renderTabViewer(container) {
   events.on(TAB_BEAT_ON, () => {
     // Start smooth cursor on first beat of playback
     startSmoothCursor();
-    // Auto-hide HUD during playback (synth or YouTube)
-    if (isFocusedMode) {
+    
+    // Auto-hide HUD during playback only if mouse hasn't moved recently
+    const now = Date.now();
+    if (isFocusedMode && player.state === 'playing' && (now - lastMouseMove > HUD_HIDE_DELAY)) {
       hideHud();
     }
   });
@@ -500,38 +539,44 @@ export function renderTabViewer(container) {
     transport.actions.onPlaybackStopped();
     // Show HUD when playback stops
     if (isFocusedMode) {
+      clearTimeout(hudTimeout);
       showHud();
     }
   });
 
-  // Show HUD on mouse move during playback, and always when paused/stopped
-  let hudTimeout = null;
-  
-  function checkHudVisibility() {
+  // Watch for player state changes (pause, etc.)
+  setInterval(() => {
     if (!isFocusedMode) return;
-    if (player.state !== 'playing') {
-      showHud();
-      clearTimeout(hudTimeout);
+    const currentState = player.state;
+    if (currentState !== lastPlayerState) {
+      lastPlayerState = currentState;
+      if (currentState !== 'playing') {
+        // Paused or stopped - show HUD immediately
+        clearTimeout(hudTimeout);
+        showHud();
+      }
     }
-  }
+  }, 100);
   
   document.addEventListener('mousemove', () => {
     if (!isFocusedMode) return;
     
-    showHud();
+    const now = Date.now();
+    if (now - lastMouseMove < MOUSE_THROTTLE) return;
+    lastMouseMove = now;
     
+    showHud();
     clearTimeout(hudTimeout);
+    
+    // During playback, set a timeout to hide the HUD again after some inactivity
     if (player.state === 'playing') {
       hudTimeout = setTimeout(() => {
-        if (player.state === 'playing') {
+        if (player.state === 'playing' && isFocusedMode) {
           hideHud();
         }
-      }, 2000);
+      }, HUD_HIDE_DELAY);
     }
   });
-  
-  // Check HUD visibility periodically (catches pause)
-  setInterval(checkHudVisibility, 200);
 
   events.on(TAB_POSITION, ({ masterBarIndex, totalBars }) => {
     posDisplay.textContent = `Bar ${masterBarIndex + 1} / ${totalBars}`;
@@ -542,6 +587,9 @@ export function renderTabViewer(container) {
   function handleFileLoaded(loadedScore, loadedTrackData) {
     score = loadedScore;
     allTrackData = loadedTrackData;
+
+    // Scroll to top of the page when a new file is loaded
+    window.scrollTo(0, 0);
 
     songInfo.textContent = `${score.title} \u2014 ${score.artist}`;
 
@@ -608,8 +656,17 @@ export function renderTabViewer(container) {
     loadingOpt.className = 'youtube-loading';
     voiceSelect.appendChild(loadingOpt);
 
+    // Save original placeholder and show searching status on the select itself
+    const originalPlaceholder = voiceSelect.options[0].textContent;
+    if (!youtubeVoiceActive) {
+      voiceSelect.options[0].textContent = 'Searching YouTube...';
+    }
+
     try {
       const results = await searchYouTube(score.artist, score.title, 5);
+      
+      // Restore placeholder
+      voiceSelect.options[0].textContent = originalPlaceholder;
       
       // Remove loading placeholder
       const loading = voiceSelect.querySelector('.youtube-loading');
@@ -646,6 +703,11 @@ export function renderTabViewer(container) {
       const loading = voiceSelect.querySelector('.youtube-loading');
       if (loading) {
         loading.textContent = 'Search failed';
+      }
+    } finally {
+      // Ensure placeholder is restored if it was changed
+      if (voiceSelect.options[0]) {
+        voiceSelect.options[0].textContent = originalPlaceholder;
       }
     }
   }
@@ -750,6 +812,46 @@ export function renderTabViewer(container) {
         name: tuningName,
         source: 'tab'
       });
+    }
+  }
+
+  // --- Persistence helpers ---
+
+  function _getSaveKey() {
+    if (!score || !youtubeVoiceActive) return null;
+    const videoId = getYouTubeVideoId(voiceSelect.value);
+    if (!videoId) return null;
+    // Key based on title, artist and videoId for uniqueness
+    return `yt-offset:${score.artist}:${score.title}:${videoId}`;
+  }
+
+  function _saveYtOffset() {
+    const key = _getSaveKey();
+    if (key) {
+      localStorage.setItem(key, youtubeOffset.toString());
+    }
+  }
+
+  function _loadYtOffset() {
+    const key = _getSaveKey();
+    if (key) {
+      const saved = localStorage.getItem(key);
+      if (saved !== null) {
+        youtubeOffset = parseFloat(saved);
+        ytOffsetSlider.value = youtubeOffset;
+        ytOffsetValue.textContent = `${youtubeOffset.toFixed(1)}s`;
+        console.log(`[YouTube] Loaded saved offset for ${key}: ${youtubeOffset}s`);
+      } else {
+        // Default to 0 if no saved offset
+        youtubeOffset = 0;
+        ytOffsetSlider.value = 0;
+        ytOffsetValue.textContent = "0.0s";
+      }
+    } else {
+      // If not a YouTube voice, ensure offset is reset for UI consistency
+      youtubeOffset = 0;
+      ytOffsetSlider.value = 0;
+      ytOffsetValue.textContent = "0.0s";
     }
   }
 }

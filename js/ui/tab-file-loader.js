@@ -58,7 +58,7 @@ export function createFileLoader(callbacks) {
   fileInput.accept = '.gp';
   fileInput.style.display = 'none';
 
-  const fileBtn = buildButton('Open GP File');
+  const fileBtn = buildButton('Open GP File', 'toggle-btn');
   fileBtn.addEventListener('click', () => fileInput.click());
 
   fileInput.addEventListener('change', async (e) => {

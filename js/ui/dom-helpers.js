@@ -110,9 +110,10 @@ export function buildButton(text, className = 'toggle-btn', opts = {}) {
  * @param {number} opts.value
  * @param {string} [opts.valueText] - initial display text for value span
  * @param {number} [opts.step]
- * @returns {{ wrap: HTMLElement, slider: HTMLInputElement, valueSpan: HTMLSpanElement }}
+ * @param {boolean} [opts.showReset] - whether to include a reset button
+ * @returns {{ wrap: HTMLElement, slider: HTMLInputElement, valueSpan: HTMLSpanElement, resetBtn: HTMLButtonElement|null }}
  */
-export function buildSlider({ className, label, min, max, value, valueText, step }) {
+export function buildSlider({ className, label, min, max, value, valueText, step, showReset = false }) {
   const wrap = document.createElement('div');
   wrap.className = className;
 
@@ -130,11 +131,20 @@ export function buildSlider({ className, label, min, max, value, valueText, step
   valueSpan.className = 'bpm-value';
   valueSpan.textContent = valueText || String(value);
 
+  let resetBtn = null;
+  if (showReset) {
+    resetBtn = document.createElement('button');
+    resetBtn.className = 'slider-reset-btn';
+    resetBtn.textContent = '↺';
+    resetBtn.title = 'Reset to 0.0';
+  }
+
   wrap.appendChild(lbl);
   wrap.appendChild(slider);
   wrap.appendChild(valueSpan);
+  if (resetBtn) wrap.appendChild(resetBtn);
 
-  return { wrap, slider, valueSpan };
+  return { wrap, slider, valueSpan, resetBtn };
 }
 
 export { SVG_NS };

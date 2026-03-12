@@ -10,14 +10,15 @@ import { buildButton } from './dom-helpers.js';
 export function createMixer(deps) {
   const { player, onTrackSelect } = deps;
 
-  const mixerToggle = buildButton('Tracks \u25BC', 'tab-mixer-toggle');
+  const mixerToggle = buildButton('Mixer \u25BC', 'toggle-btn tab-mixer-toggle');
 
   const mixerWrap = document.createElement('div');
   mixerWrap.className = 'tab-mixer hidden';
 
   mixerToggle.addEventListener('click', () => {
     const isHidden = mixerWrap.classList.toggle('hidden');
-    mixerToggle.innerHTML = isHidden ? 'Tracks &#9660;' : 'Tracks &#9650;';
+    mixerToggle.innerHTML = isHidden ? 'Mixer &#9660;' : 'Mixer &#9650;';
+    mixerToggle.classList.toggle('active', !isHidden);
   });
 
   /**
