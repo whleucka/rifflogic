@@ -70,9 +70,9 @@ This was the biggest time sink. The goal: play a YouTube backing track synchroni
 **Sync problems**: YouTube audio and MIDI-scheduled tab playback drift. The tab player uses `AudioContext.currentTime` for scheduling, but the YouTube audio element has its own clock. Small timing differences compound over a 5-minute song. We added a user-adjustable offset slider (-30s to +60s) so you can manually nudge the sync. Not perfect, but workable.
 
 **What didn't work**:
-- Trying to use the YouTube IFrame API for audio — too much latency, no precise time control
-- Attempting to sync via `requestAnimationFrame` polling — jittery, especially under CPU load
-- Auto-detecting offset from audio analysis — way too complex for the payoff
+- Trying to use the YouTube IFrame API for audio: too much latency, no precise time control
+- Attempting to sync via `requestAnimationFrame` polling: jittery, especially under CPU load
+- Auto-detecting offset from audio analysis: way too complex for the payoff
 
 The current approach (manual offset + `yt-dlp` streaming) is ugly but reliable.
 
@@ -91,7 +91,7 @@ Key gotchas:
 Canvas rendering with 200+ measures, each with multiple voices and annotations, gets heavy. Key optimizations:
 - Static canvas (staff lines, notes, annotations) is rendered once and cached
 - Overlay canvas handles the playback cursor and is redrawn incrementally
-- Layout computation is pure math (no DOM) — runs once on load/resize
+- Layout computation is pure math (no DOM) (runs once on load/resize)
 - FluidSynth scheduling uses a 150ms lookahead window to batch note events
 
 Still-open issue: very dense passages (32nd note runs) with lots of annotations can cause visible frame drops during playback, especially on lower-end machines.
