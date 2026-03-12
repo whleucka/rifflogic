@@ -506,6 +506,7 @@ export function renderTabViewer(container) {
       cancelAnimationFrame(cursorRafId);
       cursorRafId = null;
     }
+    renderer._playing = false;
   }
 
   function hideHud() {
@@ -546,12 +547,17 @@ export function renderTabViewer(container) {
 
   // Watch for player state changes (pause, etc.)
   setInterval(() => {
-    if (!isFocusedMode) return;
     const currentState = player.state;
     if (currentState !== lastPlayerState) {
       lastPlayerState = currentState;
-      if (currentState !== 'playing') {
-        // Paused or stopped - show HUD immediately
+      if (currentState === 'paused') {
+        stopSmoothCursor();
+        renderer.cursorEl.style.display = 'none';
+        renderer._needsFullOverlayRedraw = true;
+        renderer._renderOverlay();
+      }
+      if (currentState !== 'playing' && isFocusedMode) {
+        // Show HUD immediately
         clearTimeout(hudTimeout);
         showHud();
       }

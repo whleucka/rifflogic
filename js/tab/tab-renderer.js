@@ -42,6 +42,9 @@ export class TabRenderer {
     this.loopA = null;
     this.loopB = null;
 
+    // Playing state (true while setCursorSmooth is being called)
+    this._playing = false;
+
     // Smooth cursor state
     this._lastHighlightIndex = -1;
     this._lastScrollSystem = null;
@@ -74,11 +77,39 @@ export class TabRenderer {
       if (this._onCanvasClickHandler) this._onCanvasClickHandler(e);
     };
     this.overlayCanvas.addEventListener('click', this._clickListener);
+
+    // Hover cursor state
+    this._hoverIndex = -1;
+    this._moveListener = (e) => {
+      if (!this.track || this._playing) return;
+      const rect = this.overlayCanvas.getBoundingClientRect();
+      const scaleX = this.overlayCanvas.width / rect.width;
+      const scaleY = this.overlayCanvas.height / rect.height;
+      const canvasX = (e.clientX - rect.left) * scaleX;
+      const canvasY = (e.clientY - rect.top) * scaleY;
+      const index = this.getIndexAtPoint(canvasX, canvasY);
+      if (index !== this._hoverIndex) {
+        this._hoverIndex = index;
+        this._needsFullOverlayRedraw = true;
+        this._renderOverlay();
+      }
+    };
+    this._leaveListener = () => {
+      if (this._hoverIndex >= 0) {
+        this._hoverIndex = -1;
+        this._needsFullOverlayRedraw = true;
+        this._renderOverlay();
+      }
+    };
+    this.overlayCanvas.addEventListener('mousemove', this._moveListener);
+    this.overlayCanvas.addEventListener('mouseleave', this._leaveListener);
   }
 
   destroy() {
     window.removeEventListener('resize', this._onResize);
     this.overlayCanvas.removeEventListener('click', this._clickListener);
+    this.overlayCanvas.removeEventListener('mousemove', this._moveListener);
+    this.overlayCanvas.removeEventListener('mouseleave', this._leaveListener);
     clearTimeout(this._resizeTimeout);
     this.wrap.remove();
   }
@@ -131,6 +162,8 @@ export class TabRenderer {
    */
   setCursorSmooth(playbackTime) {
     if (!this.track || !this.track.measures) return;
+    this._playing = true;
+    if (this._hoverIndex >= 0) this._hoverIndex = -1;
 
     const measures = this.track.measures;
     const timeline = this.track.timeline;
@@ -200,11 +233,13 @@ export class TabRenderer {
   }
 
   clearCursor() {
+    this._playing = false;
     this.cursorIndex = -1;
     this._lastHighlightIndex = -1;
     this._lastScrollSystem = null;
     this._lastMasterBarIndex = -1;
     this.cursorEl.style.display = 'none';
+    this._needsFullOverlayRedraw = true;
     this._renderOverlay();
   }
 
@@ -327,6 +362,7 @@ export class TabRenderer {
     // For cursor-only updates, use incremental redraw
     if (this._needsFullOverlayRedraw) {
       ctx.clearRect(0, 0, this.totalWidth, this.totalHeight);
+      this._drawHoverCursor(ctx, c);
       this._drawCursor(ctx, c);
       this._drawLoopMarkers(ctx, c);
       this._needsFullOverlayRedraw = false;
@@ -346,21 +382,62 @@ export class TabRenderer {
     }
     
     // Draw new highlight
-    if (this.cursorIndex >= 0 && this.cursorEl.style.display !== 'none') {
+    if (this.cursorIndex >= 0 && this._playing) {
       this._highlightCursorNotes();
       // Cache position for next clear
       this._lastHighlightPos = this.beatPositions[this.cursorIndex];
     }
   }
 
+  _drawHoverCursor(ctx, c) {
+    if (this._hoverIndex < 0 || this._hoverIndex === this.cursorIndex) return;
+    // Only show hover when not playing
+    if (this._playing) return;
+
+    const pos = this.beatPositions[this._hoverIndex];
+    if (!pos) return;
+    const system = this.systems.find(s => s.y === pos.y);
+    if (!system) return;
+
+    const top = system.y + TAB_CONSTANTS.marginTop - TAB_CONSTANTS.cursorOverhang;
+    const bottom = system.y + system.height - TAB_CONSTANTS.marginBottom + TAB_CONSTANTS.cursorOverhang;
+
+    // Background highlight
+    ctx.fillStyle = c.cursor;
+    ctx.globalAlpha = 0.1;
+    ctx.fillRect(pos.x - 12, top, 24, bottom - top);
+
+    // Cursor line
+    ctx.strokeStyle = c.cursor;
+    ctx.lineWidth = 1;
+    ctx.globalAlpha = 0.4;
+    ctx.beginPath();
+    ctx.moveTo(pos.x, top);
+    ctx.lineTo(pos.x, bottom);
+    ctx.stroke();
+
+    // Small triangle markers
+    ctx.fillStyle = c.cursor;
+    ctx.globalAlpha = 0.4;
+    ctx.beginPath();
+    ctx.moveTo(pos.x - 4, top);
+    ctx.lineTo(pos.x + 4, top);
+    ctx.lineTo(pos.x, top + 6);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(pos.x - 4, bottom);
+    ctx.lineTo(pos.x + 4, bottom);
+    ctx.lineTo(pos.x, bottom - 6);
+    ctx.fill();
+
+    ctx.globalAlpha = 1;
+  }
+
   _drawCursor(ctx, c) {
     if (this.cursorIndex < 0) return;
 
-    // When DOM cursor is active, only draw note highlights (no canvas cursor line)
-    if (this.cursorEl.style.display !== 'none') {
-      this._highlightCursorNotes();
-      return;
-    }
+    // During playback, note highlights are handled by _drawCursorIncremental
+    if (this._playing) return;
 
     // Fallback: discrete beat-based canvas cursor (when not playing)
     const pos = this.beatPositions[this.cursorIndex];
