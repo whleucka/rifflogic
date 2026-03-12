@@ -28,7 +28,7 @@ Multi-track playback uses the SGM-V2.01 General MIDI soundfont. Download the [SF
 
 ## Guitar Pro tabs
 
-Load any `.gp5`, `.gp6`, or `.gp7` file from the tab viewer. You can find tabs at:
+Load any `.gp` file from the tab viewer. You can find tabs at:
 
 - [Songsterr](https://www.songsterr.com/)
 - [Ultimate Guitar](https://www.ultimate-guitar.com/)
