@@ -10,7 +10,7 @@ import {
   isYouTubeReady, unloadYouTube
 } from '../audio/youtube-audio.js';
 import { events, TAB_LOADED, TAB_BEAT_ON, TAB_POSITION, TAB_STOP, TUNING_CHANGE } from '../events.js';
-import { VIEW_CHANGE } from './toolbar.js';
+import { VIEW_CHANGE, setActiveView } from './toolbar.js';
 import { buildSelect, buildButton, buildSlider } from './dom-helpers.js';
 import { createFileLoader } from './tab-file-loader.js';
 import { createTransport } from './tab-transport.js';
@@ -45,8 +45,6 @@ export function renderTabViewer(container) {
   const titleControls = document.createElement('div');
   titleControls.className = 'tab-title-controls';
 
-  const expandToggle = buildButton('Expand View', 'tab-expand-toggle');
-
   // --- Mixer ---
   const mixer = createMixer({
     player,
@@ -57,9 +55,23 @@ export function renderTabViewer(container) {
   });
 
   titleControls.appendChild(mixer.mixerToggle);
-  titleControls.appendChild(expandToggle);
   titleRow.appendChild(titleControls);
   header.appendChild(titleRow);
+
+  // --- Floating UI elements (for tabs-focused mode) ---
+  const exitBtn = document.createElement('button');
+  exitBtn.className = 'tab-exit-btn';
+  exitBtn.textContent = '← Exit';
+  exitBtn.title = 'Exit tab viewer (Esc)';
+
+  const hudToggle = document.createElement('button');
+  hudToggle.className = 'tab-hud-toggle';
+  hudToggle.innerHTML = '♪ Fretboard';
+  hudToggle.title = 'Toggle fretboard overlay';
+
+  // Fretboard overlay container
+  const fretboardOverlay = document.createElement('div');
+  fretboardOverlay.className = 'fretboard-overlay';
 
   // --- Row 1: File + Track + Bars/Line + Voice ---
   const row1 = document.createElement('div');
@@ -144,6 +156,11 @@ export function renderTabViewer(container) {
   group.appendChild(header);
   group.appendChild(canvasContainer);
   container.appendChild(group);
+
+  // Floating UI elements (appended to body for fixed positioning)
+  document.body.appendChild(exitBtn);
+  document.body.appendChild(hudToggle);
+  document.body.appendChild(fretboardOverlay);
 
   // --- Event wiring ---
 
@@ -323,15 +340,52 @@ export function renderTabViewer(container) {
     }
   });
 
-  expandToggle.addEventListener('click', () => {
-    const isExpanded = document.body.classList.toggle('tabs-expanded');
-    expandToggle.textContent = isExpanded ? 'Exit Expand' : 'Expand View';
-    window.dispatchEvent(new Event('resize'));
-  });
+  // --- Tabs-focused mode ---
+  let isFocusedMode = false;
+  let fretboardVisible = false;
 
-  events.on(VIEW_CHANGE, () => {
-    document.body.classList.remove('tabs-expanded');
-    expandToggle.textContent = 'Expand View';
+  function enterFocusedMode() {
+    isFocusedMode = true;
+    document.body.classList.add('tabs-focused');
+    window.dispatchEvent(new Event('resize'));
+    
+    // Clone fretboard into overlay
+    const originalFretboard = document.querySelector('#fretboard-container .fretboard-svg');
+    if (originalFretboard) {
+      fretboardOverlay.innerHTML = '';
+      const clone = originalFretboard.cloneNode(true);
+      fretboardOverlay.appendChild(clone);
+    }
+  }
+
+  function exitFocusedMode() {
+    if (!isFocusedMode) return;
+    isFocusedMode = false;
+    fretboardVisible = false;
+    document.body.classList.remove('tabs-focused');
+    fretboardOverlay.classList.remove('visible');
+    hudToggle.classList.remove('active');
+    window.dispatchEvent(new Event('resize'));
+    // Switch back to scales view
+    setActiveView('scales');
+  }
+
+  function toggleFretboard() {
+    fretboardVisible = !fretboardVisible;
+    fretboardOverlay.classList.toggle('visible', fretboardVisible);
+    hudToggle.classList.toggle('active', fretboardVisible);
+  }
+
+  exitBtn.addEventListener('click', exitFocusedMode);
+  hudToggle.addEventListener('click', toggleFretboard);
+
+  // Auto-enter focused mode when tabs view is shown
+  events.on(VIEW_CHANGE, ({ view }) => {
+    if (view === 'tabs') {
+      enterFocusedMode();
+    } else {
+      exitFocusedMode();
+    }
   });
 
   renderer.onCanvasClick((index) => transport.actions.handleCanvasClick(index));
@@ -357,7 +411,18 @@ export function renderTabViewer(container) {
         break;
       case 'Escape':
         e.preventDefault();
-        posDisplay.textContent = transport.actions.doStop();
+        if (isFocusedMode) {
+          exitFocusedMode();
+        } else {
+          posDisplay.textContent = transport.actions.doStop();
+        }
+        break;
+      case 'KeyF':
+        // Toggle fretboard with 'F' key
+        if (isFocusedMode) {
+          e.preventDefault();
+          toggleFretboard();
+        }
         break;
     }
   });

@@ -84,6 +84,61 @@ body.tabs-expanded #main {
   gap: 0;
 }
 
+/* Tab-focused mode: tabs view takes full viewport */
+body.tabs-focused #toolbar {
+  display: none;
+}
+
+body.tabs-focused #fretboard-container {
+  display: none;
+}
+
+body.tabs-focused #main {
+  padding: 0;
+  gap: 0;
+}
+
+body.tabs-focused #controls-container {
+  max-width: none;
+}
+
+body.tabs-focused #view-tabs {
+  max-width: none;
+}
+
+body.tabs-focused .tab-viewer-group {
+  max-width: none;
+  border-radius: 0;
+}
+
+body.tabs-focused .tab-canvas-container {
+  border: none;
+  border-radius: 0;
+}
+
+/* Floating fretboard overlay */
+body.tabs-focused .fretboard-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  padding: 0.5rem 0;
+  transform: translateY(-100%);
+  transition: transform 0.3s ease;
+}
+
+body.tabs-focused .fretboard-overlay.visible {
+  transform: translateY(0);
+}
+
+body.tabs-focused .fretboard-overlay .fretboard-svg {
+  max-height: 120px;
+}
+
 #fretboard-container {
   width: 100%;
   max-width: 1600px;

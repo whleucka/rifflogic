@@ -302,3 +302,133 @@ body.tabs-expanded .tab-canvas-wrap {
   font-weight: 600;
   min-width: 3rem;
 }
+
+/* ========================================
+   Tab-focused mode: Floating HUD
+   ======================================== */
+
+body.tabs-focused .tab-header {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 200;
+  margin: 0;
+  border: none;
+  border-top: 1px solid var(--border-color);
+  border-radius: 0;
+  padding: 0.75rem 1.5rem;
+  background: rgba(30, 30, 46, 0.95);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
+  transition: transform 0.3s ease, opacity 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+body.tabs-focused .tab-header.hud-hidden {
+  transform: translateY(100%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+body.tabs-focused .tab-header h3 {
+  display: none;
+}
+
+body.tabs-focused .tab-title-row {
+  display: none;
+}
+
+body.tabs-focused .tab-controls-row {
+  justify-content: center;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+body.tabs-focused .tab-controls-row-transport {
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+}
+
+body.tabs-focused .tab-info-row {
+  justify-content: center;
+  gap: 2rem;
+  margin-top: 0;
+}
+
+body.tabs-focused .tab-mixer {
+  justify-content: center;
+  border-top: 1px solid var(--border-color);
+  padding-top: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+/* Adjust canvas container to account for floating HUD */
+body.tabs-focused .tab-canvas-container {
+  padding-bottom: 140px; /* Space for HUD */
+}
+
+/* HUD toggle button (top-right corner) */
+.tab-hud-toggle {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 201;
+  display: none;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8rem;
+  background: rgba(30, 30, 46, 0.9);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+body.tabs-focused .tab-hud-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.tab-hud-toggle:hover {
+  background: rgba(40, 40, 60, 0.95);
+  color: var(--text-primary);
+}
+
+.tab-hud-toggle.active {
+  background: var(--accent-blue);
+  color: white;
+  border-color: var(--accent-blue);
+}
+
+/* Exit button (top-left corner) */
+.tab-exit-btn {
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  z-index: 201;
+  display: none;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8rem;
+  background: rgba(30, 30, 46, 0.9);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+body.tabs-focused .tab-exit-btn {
+  display: block;
+}
+
+.tab-exit-btn:hover {
+  background: rgba(40, 40, 60, 0.95);
+  color: var(--text-primary);
+}
