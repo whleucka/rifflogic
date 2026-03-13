@@ -80,7 +80,7 @@ app.get('/api/youtube/stream/:videoId', async (req, res) => {
     return res.status(400).json({ error: 'Invalid video ID' });
   }
 
-  const cachedFile = join(CACHE_DIR, `${videoId}.mp3`);
+  const cachedFile = join(CACHE_DIR, `${videoId}.m4a`);
 
   // Download if not cached
   if (!existsSync(cachedFile)) {
@@ -114,7 +114,7 @@ app.get('/api/youtube/stream/:videoId', async (req, res) => {
       'Content-Range': `bytes ${start}-${end}/${fileSize}`,
       'Accept-Ranges': 'bytes',
       'Content-Length': chunkSize,
-      'Content-Type': 'audio/mpeg',
+      'Content-Type': 'audio/mp4',
     });
 
     createReadStream(cachedFile, { start, end }).pipe(res);
@@ -122,7 +122,7 @@ app.get('/api/youtube/stream/:videoId', async (req, res) => {
     // Full file request
     res.writeHead(200, {
       'Content-Length': fileSize,
-      'Content-Type': 'audio/mpeg',
+      'Content-Type': 'audio/mp4',
       'Accept-Ranges': 'bytes',
     });
 
@@ -213,11 +213,10 @@ function downloadAudio(videoId, outputPath) {
   return new Promise((resolve, reject) => {
     const args = [
       `https://www.youtube.com/watch?v=${videoId}`,
-      '-f', 'bestaudio/best', // Fallback to best if bestaudio unavailable
+      '-f', 'bestaudio[ext=m4a]/best[ext=m4a]/bestaudio/best',
       '-x', // Extract audio
-      '--audio-format', 'mp3', // More compatible than opus
-      '--audio-quality', '0',
-      '-o', outputPath.replace('.mp3', '.%(ext)s'),
+      '--audio-format', 'm4a',
+      '-o', outputPath.replace('.m4a', '.%(ext)s'),
       '--no-warnings',
     ];
 

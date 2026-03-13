@@ -146,13 +146,20 @@ export function playYouTube(startTime = 0) {
   }
   
   const targetTime = Math.max(0, startTime);
-  console.log(`[YouTube] playYouTube: setting currentTime to ${targetTime.toFixed(2)}s`);
+  console.log(`[YouTube] playYouTube: setting currentTime to ${targetTime.toFixed(2)}s. duration=${audioElement.duration.toFixed(2)}s`);
   
   audioElement.currentTime = targetTime;
   
   audioElement.play().catch(err => {
     console.warn('[YouTube] Play failed:', err.message);
   });
+  
+  // Verify position after a short delay
+  setTimeout(() => {
+    if (audioElement) {
+      console.log(`[YouTube Verify] time=${audioElement.currentTime.toFixed(2)}s, target=${targetTime.toFixed(2)}s, paused=${audioElement.paused}`);
+    }
+  }, 300);
 }
 
 /**

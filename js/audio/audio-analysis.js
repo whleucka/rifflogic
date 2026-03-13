@@ -318,12 +318,29 @@ export function findOptimalOffset(tabOnsets, ytOnsets) {
   const minOffset = -CORRELATION_SEARCH_RANGE;
   const maxOffset = CORRELATION_SEARCH_RANGE;
   
+  // Calculate a "hint" offset based on first onsets
+  // Most songs start with a clear note, so the first detected onsets are good anchors
+  const firstTab = tabOnsets[0];
+  const firstYt = ytOnsets[0];
+  const hintOffset = firstYt - firstTab;
+  console.log(`[AudioAnalysis] First-note alignment hint: ${hintOffset.toFixed(2)}s`);
+
   let bestOffset = 0;
   let bestScore = 0;
   const scores = [];
   
   for (let offset = minOffset; offset <= maxOffset; offset += CORRELATION_RESOLUTION) {
-    const score = computeCorrelation(tabOnsets, ytOnsets, offset);
+    let score = computeCorrelation(tabOnsets, ytOnsets, offset);
+    
+    // Apply a subtle "First Note Bias" to break ties in repetitive music.
+    // We give a small bonus (up to 5% of max possible score) if this offset 
+    // aligns with the first heard note.
+    const hintDiff = Math.abs(offset - hintOffset);
+    if (hintDiff < 0.5) {
+      const bonus = (1.0 - hintDiff / 0.5) * (tabOnsets.length * 0.05);
+      score += bonus;
+    }
+
     scores.push({ offset, score });
     
     if (score > bestScore) {
