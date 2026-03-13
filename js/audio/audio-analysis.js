@@ -70,31 +70,7 @@ export function isAnalyserReady() {
  * @returns {number[]} Array of onset times in seconds
  */
 export function extractTabOnsets(timeline) {
-  if (!timeline || timeline.length === 0) {
-    console.warn('[AudioAnalysis] Timeline is empty or null:', timeline);
-    return [];
-  }
-  
-  console.log(`[AudioAnalysis] Processing timeline with ${timeline.length} events`);
-  
-  // Debug: log first few events to understand structure
-  if (timeline.length > 0) {
-    console.log('[AudioAnalysis] First event sample:', JSON.stringify(timeline[0], null, 2));
-    
-    // Count events with notes
-    let eventsWithNotes = 0;
-    let totalNotes = 0;
-    let tieNotes = 0;
-    for (const ev of timeline.slice(0, 100)) {
-      const notes = ev.notes || [];
-      if (notes.length > 0) {
-        eventsWithNotes++;
-        totalNotes += notes.length;
-        tieNotes += notes.filter(n => n.tieDestination).length;
-      }
-    }
-    console.log(`[AudioAnalysis] First 100 events: ${eventsWithNotes} with notes, ${totalNotes} total notes, ${tieNotes} are tie destinations`);
-  }
+  if (!timeline || timeline.length === 0) return [];
   
   const onsets = [];
   let lastOnsetTime = -MIN_ONSET_INTERVAL;
@@ -104,7 +80,6 @@ export function extractTabOnsets(timeline) {
     if (event.time - lastOnsetTime < MIN_ONSET_INTERVAL) continue;
     
     // Check if this beat has any non-tie notes
-    // Handle both direct notes array and nested structure
     const notes = event.notes || [];
     const hasNewNotes = notes.length > 0 && notes.some(note => !note.tieDestination);
     
@@ -115,14 +90,7 @@ export function extractTabOnsets(timeline) {
   }
   
   // Only return onsets within analysis duration
-  const filteredOnsets = onsets.filter(t => t < ANALYSIS_DURATION);
-  
-  if (onsets.length > 0) {
-    console.log(`[AudioAnalysis] First onset at ${onsets[0].toFixed(2)}s, last at ${onsets[onsets.length - 1].toFixed(2)}s`);
-  }
-  console.log(`[AudioAnalysis] Found ${onsets.length} total onsets, ${filteredOnsets.length} within first ${ANALYSIS_DURATION}s`);
-  
-  return filteredOnsets;
+  return onsets.filter(t => t < ANALYSIS_DURATION);
 }
 
 /**
@@ -239,7 +207,6 @@ export async function detectYouTubeOnsets(audioElement, onProgress = () => {}) {
 export async function detectOnsetsOffline(audioUrl, onProgress = () => {}) {
   const ctx = getAudioContext();
   
-  console.log('[AudioAnalysis] Fetching audio for offline analysis...');
   onProgress(0);
   
   // Fetch the audio data
@@ -251,14 +218,11 @@ export async function detectOnsetsOffline(audioUrl, onProgress = () => {}) {
   const arrayBuffer = await response.arrayBuffer();
   onProgress(0.2);
   
-  console.log('[AudioAnalysis] Decoding audio...');
   const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
   onProgress(0.4);
   
-  console.log('[AudioAnalysis] Analyzing onsets...');
   const onsets = analyzeBufferOnsets(audioBuffer, (p) => onProgress(0.4 + p * 0.6));
   
-  console.log(`[AudioAnalysis] Detected ${onsets.length} onsets`);
   return onsets;
 }
 
@@ -278,14 +242,10 @@ function analyzeBufferOnsets(buffer, onProgress = () => {}) {
   const hopSize = 512; // ~11.6ms at 44.1kHz
   const frameSize = 2048;
   
-  const onsets = [];
-  let previousEnergy = 0;
-  let lastOnsetTime = -MIN_ONSET_INTERVAL;
-  
-  // Adaptive threshold based on signal statistics
+  // First pass: compute all energies and diffs
   const energies = [];
+  const diffData = []; // { time, diff, energy }
   
-  // First pass: compute all energies
   for (let i = 0; i < maxSamples - frameSize; i += hopSize) {
     let energy = 0;
     for (let j = 0; j < frameSize; j++) {
@@ -293,37 +253,49 @@ function analyzeBufferOnsets(buffer, onProgress = () => {}) {
     }
     energy = Math.sqrt(energy / frameSize);
     energies.push(energy);
+    
+    if (energies.length > 1) {
+      const diff = Math.max(0, energy - energies[energies.length - 2]);
+      const time = (energies.length * hopSize) / sampleRate;
+      diffData.push({ time, diff, energy });
+    }
   }
   
-  // Compute adaptive threshold (mean + 1.5 * stddev of energy differences)
-  const diffs = [];
-  for (let i = 1; i < energies.length; i++) {
-    const diff = Math.max(0, energies[i] - energies[i - 1]);
-    diffs.push(diff);
-  }
-  
+  // Compute statistics for adaptive threshold
+  const diffs = diffData.map(d => d.diff);
   const meanDiff = diffs.reduce((a, b) => a + b, 0) / diffs.length;
   const stdDiff = Math.sqrt(diffs.reduce((a, b) => a + (b - meanDiff) ** 2, 0) / diffs.length);
+  
+  // Use slightly lower threshold to catch more onsets
   const adaptiveThreshold = meanDiff + 1.5 * stdDiff;
   
-  console.log(`[AudioAnalysis] Adaptive threshold: ${adaptiveThreshold.toFixed(4)}`);
+  // Also compute energy statistics to filter out quiet sections
+  const meanEnergy = energies.reduce((a, b) => a + b, 0) / energies.length;
+  const maxEnergy = Math.max(...energies);
+  // Ignore onsets below 5% of max energy - this filters out background noise 
+  // while keeping most intros. Also ensure it's at least above 10% of mean energy.
+  const minEnergy = Math.max(maxEnergy * 0.05, meanEnergy * 0.1);
   
-  // Second pass: detect onsets
-  for (let i = 1; i < energies.length; i++) {
-    const time = (i * hopSize) / sampleRate;
-    const diff = Math.max(0, energies[i] - energies[i - 1]);
-    
-    if (diff > adaptiveThreshold && time - lastOnsetTime >= MIN_ONSET_INTERVAL) {
-      onsets.push(time);
-      lastOnsetTime = time;
-    }
-    
-    if (i % 1000 === 0) {
-      onProgress(i / energies.length);
+  console.log(`[AudioAnalysis] Energy: mean=${meanEnergy.toFixed(4)}, max=${maxEnergy.toFixed(4)}, minThreshold=${minEnergy.toFixed(4)}`);
+  
+  // Second pass: detect strong onsets only
+  const onsets = [];
+  let lastOnsetTime = -MIN_ONSET_INTERVAL;
+  
+  for (const d of diffData) {
+    if (d.diff > adaptiveThreshold && 
+        d.energy > minEnergy && 
+        d.time - lastOnsetTime >= MIN_ONSET_INTERVAL) {
+      onsets.push(d.time);
+      lastOnsetTime = d.time;
     }
   }
   
   onProgress(1);
+  
+  console.log(`[AudioAnalysis] Onset threshold=${adaptiveThreshold.toFixed(4)}`);
+  console.log(`[AudioAnalysis] Detected ${onsets.length} strong onsets`);
+  
   return onsets;
 }
 
@@ -331,12 +303,16 @@ function analyzeBufferOnsets(buffer, onProgress = () => {}) {
  * Find the optimal offset between tab onsets and YouTube onsets using cross-correlation.
  * @param {number[]} tabOnsets - Onset times from tab timeline
  * @param {number[]} ytOnsets - Onset times from YouTube audio
- * @returns {{ offset: number, confidence: number }} Best offset and confidence score
+ * @returns {{ offset: number, confidence: number, debug: object }} Best offset and confidence score
  */
 export function findOptimalOffset(tabOnsets, ytOnsets) {
   if (tabOnsets.length === 0 || ytOnsets.length === 0) {
     return { offset: 0, confidence: 0 };
   }
+  
+  console.log(`[AudioAnalysis] Correlating ${tabOnsets.length} tab onsets with ${ytOnsets.length} YouTube onsets`);
+  console.log(`[AudioAnalysis] Tab onset range: ${tabOnsets[0].toFixed(2)}s - ${tabOnsets[tabOnsets.length-1].toFixed(2)}s`);
+  console.log(`[AudioAnalysis] YT onset range: ${ytOnsets[0].toFixed(2)}s - ${ytOnsets[ytOnsets.length-1].toFixed(2)}s`);
   
   // Try different offsets and compute correlation score
   const minOffset = -CORRELATION_SEARCH_RANGE;
@@ -370,13 +346,52 @@ export function findOptimalOffset(tabOnsets, ytOnsets) {
     }
   }
   
-  // Compute confidence based on how much better the best is than average
+  // Sort candidates by score to find other peaks
+  const sortedScores = [...scores].sort((a, b) => b.score - a.score);
+  
+  // Find second best peak that is far enough from the best offset
+  let secondBestScore = 0;
+  for (const s of sortedScores) {
+    if (Math.abs(s.offset - bestOffset) > 1.0) { // 1 second gap
+      secondBestScore = s.score;
+      break;
+    }
+  }
+  
+  // Confidence is a combination of:
+  // 1. How much better the best is than average (signal-to-noise)
+  // 2. How much better the best is than the next best distinct peak
+  // 3. Absolute match rate (higher = more likely correct)
   const avgScore = scores.reduce((a, b) => a + b.score, 0) / scores.length;
-  const confidence = avgScore > 0 ? Math.min(1, (bestScore - avgScore) / avgScore) : 0;
+  const peakGap = secondBestScore > 0 ? (bestScore - secondBestScore) / secondBestScore : 1;
+  const avgGap = avgScore > 0 ? (bestScore - avgScore) / avgScore : 0;
   
-  console.log(`[AudioAnalysis] Best offset: ${bestOffset.toFixed(2)}s (confidence: ${(confidence * 100).toFixed(1)}%)`);
+  const maxPossibleScore = tabOnsets.length; 
+  const matchRate = bestScore / maxPossibleScore;
   
-  return { offset: bestOffset, confidence };
+  // Rhythmic music (like Nirvana) often has peaks very close in score (echoes).
+  // We use a non-linear scaling for peakGap and include matchRate as a booster.
+  let confidence = Math.min(1, avgGap * 0.4) * (0.3 + 0.7 * Math.min(1, peakGap * 20));
+  
+  // Boost confidence if match rate is high (> 40%)
+  if (matchRate > 0.4) {
+    confidence = Math.min(1, confidence * 1.5);
+  }
+  
+  // Log top 5 candidates to help debug
+  const topCandidates = sortedScores.slice(0, 5);
+  console.log(`[AudioAnalysis] Top 5 offset candidates:`);
+  for (const s of topCandidates) {
+    const rate = (s.score / maxPossibleScore * 100).toFixed(1);
+    console.log(`  ${s.offset.toFixed(2)}s: score=${s.score.toFixed(1)} (${rate}%)`);
+  }
+  
+  console.log(`[AudioAnalysis] Best offset: ${bestOffset.toFixed(2)}s`);
+  console.log(`[AudioAnalysis] Score: ${bestScore.toFixed(1)} / ${maxPossibleScore} (${(matchRate * 100).toFixed(1)}% match rate)`);
+  console.log(`[AudioAnalysis] Gap to next peak: ${(peakGap * 100).toFixed(1)}%`);
+  console.log(`[AudioAnalysis] Confidence: ${(confidence * 100).toFixed(1)}%`);
+  
+  return { offset: bestOffset, confidence, matchRate };
 }
 
 /**
@@ -384,7 +399,9 @@ export function findOptimalOffset(tabOnsets, ytOnsets) {
  * Score = sum of (1 / (1 + distance)) for each tab onset to nearest YouTube onset.
  * @param {number[]} tabOnsets
  * @param {number[]} ytOnsets
- * @param {number} offset - Offset to apply (ytTime = tabTime + offset)
+ * @param {number} offset - Offset where ytTime = tabTime + offset
+ *                          Positive = YouTube has intro (seek ahead)
+ *                          Negative = Tab has intro (delay YouTube start)
  * @returns {number} Correlation score
  */
 function computeCorrelation(tabOnsets, ytOnsets, offset) {
@@ -392,6 +409,9 @@ function computeCorrelation(tabOnsets, ytOnsets, offset) {
   const tolerance = 0.1; // 100ms tolerance for matching
   
   for (const tabTime of tabOnsets) {
+    // We want to find: at what YouTube time does this tab onset occur?
+    // If offset is positive, YouTube is ahead (has intro we skip)
+    // If offset is negative, tab is ahead (we delay YouTube)
     const ytTime = tabTime + offset;
     
     // Find nearest YouTube onset using binary search
@@ -434,13 +454,10 @@ function computeCorrelation(tabOnsets, ytOnsets, offset) {
  * @returns {Promise<{ offset: number, confidence: number }>}
  */
 export async function autoSync(audioUrl, tabTimeline, onProgress = () => {}) {
-  console.log('[AudioAnalysis] Starting auto-sync...');
-  
   // Stage 1: Extract tab onsets
   onProgress({ stage: 'tab', progress: 0 });
   const tabOnsets = extractTabOnsets(tabTimeline);
   onProgress({ stage: 'tab', progress: 1 });
-  console.log(`[AudioAnalysis] Tab onsets: ${tabOnsets.length}`);
   
   if (tabOnsets.length < 5) {
     console.warn('[AudioAnalysis] Too few tab onsets for reliable sync');

@@ -70,10 +70,13 @@ export async function isProxyAvailable() {
  * @returns {Promise<void>}
  */
 export async function loadYouTubeAudio(videoId) {
+  console.log(`[YouTube] loadYouTubeAudio(${videoId}) - currentVideoId=${currentVideoId}, isReady=${isReady}`);
   if (currentVideoId === videoId && isReady) {
+    console.log(`[YouTube] Already loaded, skipping`);
     return; // Already loaded
   }
 
+  console.log(`[YouTube] Loading new audio...`);
   isLoading = true;
   isReady = false;
 
@@ -90,6 +93,9 @@ export async function loadYouTubeAudio(videoId) {
   
   // Use the streaming endpoint (handles CORS)
   audioElement.src = `${API_BASE}/stream/${videoId}`;
+  
+  // Expose for debugging
+  window._ytAudio = audioElement;
 
   // Create Web Audio nodes
   sourceNode = ctx.createMediaElementSource(audioElement);
@@ -139,7 +145,11 @@ export function playYouTube(startTime = 0) {
     ctx.resume();
   }
   
-  audioElement.currentTime = startTime;
+  const targetTime = Math.max(0, startTime);
+  console.log(`[YouTube] playYouTube: setting currentTime to ${targetTime.toFixed(2)}s`);
+  
+  audioElement.currentTime = targetTime;
+  
   audioElement.play().catch(err => {
     console.warn('[YouTube] Play failed:', err.message);
   });

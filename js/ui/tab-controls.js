@@ -429,12 +429,16 @@ export function renderTabViewer(container) {
           // - Negative offset: Tab has intro, delay YouTube start
           const ytTime = startTime + youtubeOffset;
           
+          console.log(`[YT Sync] onPlay: tabTime=${startTime.toFixed(2)}, offset=${youtubeOffset.toFixed(2)}, ytTime=${ytTime.toFixed(2)}`);
+          
           if (ytTime >= 0) {
             // YouTube should already be playing at this point
+            seekYouTube(ytTime);
             playYouTube(ytTime);
           } else {
             // YouTube shouldn't start yet - delay it
             const delayMs = Math.abs(ytTime) * 1000 / player.tempoScale;
+            console.log(`[YT Sync] Delaying YouTube start by ${delayMs.toFixed(0)}ms`);
             ytDelayTimeout = setTimeout(() => {
               if (player.state === 'playing') {
                 playYouTube(0);
@@ -956,6 +960,7 @@ export function renderTabViewer(container) {
     const key = _getSaveKey();
     if (key) {
       localStorage.setItem(key, youtubeOffset.toString());
+      console.log(`[YouTube] Saved offset for ${key}: ${youtubeOffset.toFixed(2)}s`);
     }
   }
 
@@ -967,12 +972,13 @@ export function renderTabViewer(container) {
         youtubeOffset = parseFloat(saved);
         ytOffsetSlider.value = youtubeOffset;
         ytOffsetValue.textContent = `${youtubeOffset.toFixed(1)}s`;
-        console.log(`[YouTube] Loaded saved offset for ${key}: ${youtubeOffset}s`);
+        console.log(`[YouTube] Loaded offset for ${key}: ${youtubeOffset.toFixed(2)}s`);
       } else {
         // Default to 0 if no saved offset
         youtubeOffset = 0;
         ytOffsetSlider.value = 0;
         ytOffsetValue.textContent = "0.0s";
+        console.log(`[YouTube] No saved offset for ${key}, using 0.0s`);
       }
     } else {
       // If not a YouTube voice, ensure offset is reset for UI consistency
