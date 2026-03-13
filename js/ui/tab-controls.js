@@ -7,8 +7,9 @@ import { initFluidSynth, isFluidReady, isFluidLoading, assignChannels, fluidSetV
 import {
   searchYouTube, isProxyAvailable, loadYouTubeAudio, playYouTube,
   pauseYouTube, stopYouTube, seekYouTube, setYouTubePlaybackRate,
-  isYouTubeReady, unloadYouTube
+  isYouTubeReady, unloadYouTube, getCurrentVideoId
 } from '../audio/youtube-audio.js';
+import { autoSync, cancelAnalysis } from '../audio/audio-analysis.js';
 import { events, TAB_LOADED, TAB_BEAT_ON, TAB_POSITION, TAB_STOP, TUNING_CHANGE } from '../events.js';
 import { VIEW_CHANGE, setActiveView } from './toolbar.js';
 import { buildSelect, buildButton, buildSlider } from './dom-helpers.js';
@@ -109,7 +110,14 @@ export function renderTabViewer(container) {
   });
   ytOffsetWrap.style.display = 'none';
   
+  // Auto-sync button
+  const autoSyncBtn = buildButton('Auto', 'toggle-btn auto-sync-btn', {
+    title: 'Automatically detect sync offset',
+  });
+  autoSyncBtn.style.display = 'none';
+  
   let youtubeOffset = 0; // seconds to delay YouTube audio start
+  let isAutoSyncing = false; // Track if auto-sync is in progress
 
   // YouTube reset button
   if (ytOffsetReset) {
@@ -143,6 +151,7 @@ export function renderTabViewer(container) {
   row1.appendChild(mixer.mixerToggle); // Mixer button moved to row1
   row1.appendChild(voiceSelect);
   row1.appendChild(ytOffsetWrap);
+  row1.appendChild(autoSyncBtn);
   header.appendChild(row1);
 
   // --- Row 2: Transport ---
@@ -255,8 +264,9 @@ export function renderTabViewer(container) {
     selectedOption.textContent = oldLabel;
     voiceSelect.disabled = false;
 
-    // Show/hide YouTube offset control
+    // Show/hide YouTube offset control and auto-sync button
     ytOffsetWrap.style.display = youtubeVoiceActive ? '' : 'none';
+    autoSyncBtn.style.display = youtubeVoiceActive ? '' : 'none';
 
     // Update player callbacks based on YouTube state
     _updateYouTubeCallbacks();
@@ -300,6 +310,107 @@ export function renderTabViewer(container) {
       clearTimeout(ytDelayTimeout);
       ytDelayTimeout = null;
     }
+  }
+
+  // Auto-sync button click handler
+  autoSyncBtn.addEventListener('click', async () => {
+    if (isAutoSyncing) {
+      // Cancel in-progress analysis
+      cancelAnalysis();
+      isAutoSyncing = false;
+      autoSyncBtn.textContent = 'Auto';
+      autoSyncBtn.classList.remove('active');
+      return;
+    }
+    
+    if (!isYouTubeReady() || !player.timeline) {
+      console.warn('[AutoSync] YouTube not ready or no tab loaded');
+      return;
+    }
+    
+    const videoId = getCurrentVideoId();
+    if (!videoId) return;
+    
+    isAutoSyncing = true;
+    autoSyncBtn.classList.add('active');
+    const originalText = autoSyncBtn.textContent;
+    
+    try {
+      const audioUrl = `/api/youtube/stream/${videoId}`;
+      
+      const result = await autoSync(audioUrl, player.timeline, ({ stage, progress }) => {
+        // Update button text with progress
+        if (stage === 'tab') {
+          autoSyncBtn.textContent = 'Tab...';
+        } else if (stage === 'youtube') {
+          autoSyncBtn.textContent = `YT ${Math.round(progress * 100)}%`;
+        } else if (stage === 'correlate') {
+          autoSyncBtn.textContent = 'Sync...';
+        }
+      });
+      
+      if (result.confidence > 0.1) {
+        // Apply the detected offset
+        youtubeOffset = result.offset;
+        ytOffsetSlider.value = youtubeOffset;
+        ytOffsetValue.textContent = `${youtubeOffset.toFixed(1)}s`;
+        _saveYtOffset();
+        
+        // Flash success
+        autoSyncBtn.textContent = `${result.offset.toFixed(1)}s`;
+        autoSyncBtn.classList.add('success');
+        setTimeout(() => {
+          autoSyncBtn.classList.remove('success');
+          autoSyncBtn.textContent = originalText;
+        }, 2000);
+        
+        console.log(`[AutoSync] Applied offset: ${result.offset.toFixed(2)}s (confidence: ${(result.confidence * 100).toFixed(1)}%)`);
+        
+        // If playing, re-sync YouTube to new offset
+        if (player.state === 'playing' && isYouTubeReady()) {
+          _clearYtDelayTimeout();
+          const currentTime = player.getPlaybackTime();
+          if (currentTime >= 0) {
+            const ytTime = currentTime + youtubeOffset;
+            if (ytTime >= 0) {
+              seekYouTube(ytTime);
+            } else {
+              pauseYouTube();
+              _startDelayTimer(Math.abs(ytTime));
+            }
+          }
+        }
+      } else {
+        // Low confidence - show warning
+        autoSyncBtn.textContent = 'N/A';
+        autoSyncBtn.classList.add('warning');
+        setTimeout(() => {
+          autoSyncBtn.classList.remove('warning');
+          autoSyncBtn.textContent = originalText;
+        }, 2000);
+        console.warn('[AutoSync] Low confidence result, offset not applied');
+      }
+    } catch (err) {
+      console.error('[AutoSync] Failed:', err);
+      autoSyncBtn.textContent = 'Err';
+      autoSyncBtn.classList.add('error');
+      setTimeout(() => {
+        autoSyncBtn.classList.remove('error');
+        autoSyncBtn.textContent = originalText;
+      }, 2000);
+    } finally {
+      isAutoSyncing = false;
+      autoSyncBtn.classList.remove('active');
+    }
+  });
+
+  function _startDelayTimer(delaySeconds) {
+    const delayMs = delaySeconds * 1000 / player.tempoScale;
+    ytDelayTimeout = setTimeout(() => {
+      if (player.state === 'playing') {
+        playYouTube(0);
+      }
+    }, delayMs);
   }
 
   /**
@@ -604,6 +715,7 @@ export function renderTabViewer(container) {
     voiceSelect.value = VOICE_TYPES.KARPLUS;
     fluidSetVoiceProgram(null);
     ytOffsetWrap.style.display = 'none';
+    autoSyncBtn.style.display = 'none';
     _updateYouTubeCallbacks();
 
     songInfo.textContent = `${score.title} \u2014 ${score.artist}`;
