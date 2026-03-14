@@ -19,9 +19,6 @@ Built with vanilla JS, Web Audio API, and FluidSynth (WASM).
 - **Fullscreen tab viewer**: distraction-free mode with floating HUD controls
 - **Fretboard overlay**: live fretboard visualization during tab playback
 
-## Screenshots
-<img width="1920" height="1200" alt="image" src="https://github.com/user-attachments/assets/463ec01c-1ae6-4c56-a6e9-665029bb55e9" />
-
 ## Soundfont
 
 Multi-track playback uses the SGM-V2.01 General MIDI soundfont. Download the [SF2 file](https://archive.org/download/SGM-V2.01/SGM-V2.01.sf2) and place it at `assets/SGM-V2.01.sf2`. It's ~247MB and cached in IndexedDB after first load.
