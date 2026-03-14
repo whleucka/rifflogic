@@ -18,8 +18,8 @@ let isReady = false;
 
 /**
  * Search YouTube for tracks matching the query.
- * Searches for more results than requested, then ranks official channels
- * (VEVO, Topic) higher and returns the top `limit` results.
+ * Searches for more results than requested, then ranks results and
+ * returns the top `limit` results.
  * @param {string} artist 
  * @param {string} title 
  * @param {number} limit 
@@ -46,9 +46,8 @@ export async function searchYouTube(artist, title, limit = 5) {
       const t = (r.title || '').toUpperCase();
       let score = 0;
       if (ch.includes('VEVO')) score += 20;
-      if (ch.includes('OFFICIAL')) score += 20;
-      if (ch.includes('- TOPIC')) score += 15;
-      if (ch.includes('LYRIC')) score += 10;
+      if (ch.includes('LYRIC')) score += 15;
+      if (ch.includes('OFFICIAL')) score += 10;
       // Penalize likely non-studio versions
       if (t.includes('FULL ALBUM')) score -= 10;
       if (t.includes('LIVE')) score -= 10;
