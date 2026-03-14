@@ -41,6 +41,7 @@ export class TabRenderer {
     this.cursorIndex = -1;
     this.loopA = null;
     this.loopB = null;
+    this.checkpointIndices = new Set(); // beat indices that have sync checkpoints
 
     // Playing state (true while setCursorSmooth is being called)
     this._playing = false;
@@ -250,6 +251,16 @@ export class TabRenderer {
     this._renderOverlay();
   }
 
+  /**
+   * Set which beat indices have sync checkpoints.
+   * @param {Set<number>|Array<number>} indices
+   */
+  setCheckpoints(indices) {
+    this.checkpointIndices = indices instanceof Set ? indices : new Set(indices);
+    this._needsFullOverlayRedraw = true;
+    this._renderOverlay();
+  }
+
   getIndexAtPoint(canvasX, canvasY) {
     let closest = 0;
     let minDist = Infinity;
@@ -362,6 +373,7 @@ export class TabRenderer {
     // For cursor-only updates, use incremental redraw
     if (this._needsFullOverlayRedraw) {
       ctx.clearRect(0, 0, this.totalWidth, this.totalHeight);
+      this._drawCheckpointMarkers(ctx);
       this._drawHoverCursor(ctx, c);
       this._drawCursor(ctx, c);
       this._drawLoopMarkers(ctx, c);
@@ -519,6 +531,41 @@ export class TabRenderer {
   _drawLoopMarkers(ctx, c) {
     if (this.loopA !== null) this._drawLoopMarker(ctx, this.beatPositions[this.loopA], 'A', c.blue);
     if (this.loopB !== null) this._drawLoopMarker(ctx, this.beatPositions[this.loopB], 'B', c.red);
+  }
+
+  _drawCheckpointMarkers(ctx) {
+    if (this.checkpointIndices.size === 0) return;
+    const C = TAB_CONSTANTS;
+
+    for (const idx of this.checkpointIndices) {
+      const pos = this.beatPositions[idx];
+      if (!pos) continue;
+
+      const top = pos.y + C.marginTop - C.cursorOverhang - 2;
+      const size = 4;
+
+      // Small diamond marker
+      ctx.fillStyle = '#f59e0b'; // amber
+      ctx.globalAlpha = 0.9;
+      ctx.beginPath();
+      ctx.moveTo(pos.x, top - size);
+      ctx.lineTo(pos.x + size, top);
+      ctx.lineTo(pos.x, top + size);
+      ctx.lineTo(pos.x - size, top);
+      ctx.closePath();
+      ctx.fill();
+
+      // Thin vertical tick line
+      ctx.strokeStyle = '#f59e0b';
+      ctx.lineWidth = 1;
+      ctx.globalAlpha = 0.3;
+      ctx.beginPath();
+      ctx.moveTo(pos.x, top + size);
+      ctx.lineTo(pos.x, pos.y + pos.systemHeight - C.marginBottom + C.cursorOverhang);
+      ctx.stroke();
+
+      ctx.globalAlpha = 1;
+    }
   }
 
   _drawLoopMarker(ctx, pos, label, color) {

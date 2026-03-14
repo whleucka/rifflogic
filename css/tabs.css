@@ -376,6 +376,7 @@ body.tabs-expanded .tab-canvas-wrap {
 .auto-sync-btn {
   font-size: 0.8rem;
   padding: 0.35rem 0.6rem;
+  margin-left: -0.2rem;
   min-width: 3.5rem;
   background: var(--bg-surface);
   border: 1px solid var(--border-color);

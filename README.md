@@ -12,7 +12,7 @@ Built with vanilla JS, Web Audio API, and FluidSynth (WASM).
 - **Chord practice**: chord library with fingering diagrams, strum playback
 - **Guitar Pro tab viewer**: load .gp5/.gp6/.gp7 files, rendered to canvas with notation
 - **Multi-track playback**: plays all tracks with GM-accurate voices via FluidSynth (WASM), track mixer with solo/mute
-- **YouTube backing tracks**: search and sync YouTube audio with tab playback, per-song offset saved automatically
+- **YouTube backing tracks**: search and sync YouTube audio with tab playback, per-song offset saved automatically, sync checkpoints for drift correction
 - **Tempo control**: adjustable playback speed, metronome with click track
 - **Loop mode**: A/B loop points for practicing sections
 - **Multiple voice types**: Karplus-Strong, acoustic, clean electric, overdriven, muted (FluidSynth GM patches)
@@ -93,14 +93,32 @@ This was the biggest time sink. The goal: play a YouTube backing track synchroni
 
 **The proxy approach**: Browser can't fetch YouTube audio directly (CORS). The server uses `yt-dlp` to grab audio, caches it locally (500MB cap, 24h TTL), and streams it back with range request support for seeking.
 
-**Sync problems**: YouTube audio and MIDI-scheduled tab playback drift. The tab player uses `AudioContext.currentTime` for scheduling, but the YouTube audio element has its own clock. Small timing differences compound over a 5-minute song. We added a user-adjustable offset slider (-30s to +60s) so you can manually nudge the sync.
+**The dual clock problem**: The tab player originally used `AudioContext.currentTime` to drive its scheduler and cursor. The YouTube audio runs on `HTMLAudioElement`, which has its own independent clock. These two clocks drift apart over time. Even small rate differences compound, and by a couple minutes into a song the cursor and audio are noticeably out of sync.
+
+The fix was to flip the clock hierarchy. In YouTube mode, the tab player reads its time directly from `audioElement.currentTime` instead of `AudioContext.currentTime`. This is done through an external clock function that the player calls for all timing decisions (cursor position, beat scheduling). One clock, zero drift.
+
+**Recording tempo vs tab tempo**: Even after fixing the clock drift, the cursor still runs ahead of the audio. The tab assumes a fixed tempo (e.g. 104 BPM) but real recordings don't hold a perfectly steady tempo. Bands speed up and slow down slightly throughout a song. Over 40+ bars these micro-variations accumulate and the theoretical beat positions in the tab diverge from where the beats actually land in the recording.
+
+There is no automatic solution to this. We tried several approaches to detect and correct drift programmatically, but none worked reliably across different songs and recordings. The problem is fundamentally that the tab's tempo map doesn't match the recording's actual tempo.
+
+**Sync checkpoints**: The solution is manual user correction through checkpoints. When the user notices drift during playback, they pause, press `C`, and click where in the tab the audio actually was. This records a mapping: "this beat in the tab = this position in the YouTube audio." On subsequent plays, the external clock uses piecewise linear interpolation between checkpoints to warp the tab's timeline to match the recording. More checkpoints = tighter sync. Checkpoints are saved to localStorage per song/video combo.
+
+The checkpoint system works because it doesn't touch the YouTube audio at all. The audio plays at a constant rate. Only the tab cursor speed is adjusted between checkpoints to stay aligned. The user effectively builds a custom tempo map that matches the real recording.
 
 **What didn't work**:
 - Trying to use the YouTube IFrame API for audio: too much latency, no precise time control
 - Attempting to sync via `requestAnimationFrame` polling: jittery, especially under CPU load
-- Auto-detecting offset from audio analysis: way too complex for the payoff
+- Periodically seeking the YouTube audio element to correct drift: causes audible glitches (pops, stutters) every few seconds
+- Auto-detecting drift from audio analysis: the fundamental issue is tempo variation in the recording, not clock drift. No amount of analysis can predict where the next beat will land in a live recording
 
-The current approach (manual offset + `yt-dlp` streaming) is ugly but reliable. `yt-offset` is saved / song, so you should only have to set it once.
+**Search ranking**: YouTube search results are re-ranked to prioritize official channels (VEVO, Topic) and penalize live recordings, covers, and remixes. The user still picks from a list, but studio album tracks float to the top.
+
+**Keyboard shortcuts for checkpoints**:
+- `C` (while paused with YouTube active): enter checkpoint mode, then click on the tab where the audio is
+- `Shift+C`: clear all checkpoints for the current song
+- `Escape`: cancel checkpoint mode without placing one
+
+Checkpoints are shown on the score as small amber diamond markers.
 
 ### GP file parsing
 

@@ -102,9 +102,6 @@ export class TabPlayer {
    */
   setExternalClock(fn) {
     this._externalClockFn = fn;
-    this._loggedSchedulerType = false; // reset so next scheduler call logs its type
-    this._extClockLogCount = 0;
-    console.log(`[TabPlayer] External clock ${fn ? 'SET' : 'CLEARED'}`);
   }
 
   /** Primary track shortcuts */
@@ -184,14 +181,7 @@ export class TabPlayer {
     this._pendingFluidAudio = [];
     this._stopFluidInterval();
 
-    // Reset diagnostic log flags
-    this._loggedSchedulerType = false;
-    this._loggedExtClockUsed = false;
-    this._loggedExtClockFallback = false;
-    this._extClockLogCount = 0;
-
     this.state = 'playing';
-    console.log(`[TabPlayer] play() — externalClock=${!!this._externalClockFn}, synthMuted=${this._synthMuted}`);
     this.schedulerInterval = setInterval(() => this._scheduler(), SCHEDULE_INTERVAL_MS);
     this._startVisualLoop();
     if (isFluidReady()) this._startFluidInterval();
@@ -250,14 +240,7 @@ export class TabPlayer {
     this._pendingFluidAudio = [];
     this._stopFluidInterval();
 
-    // Reset diagnostic log flags
-    this._loggedSchedulerType = false;
-    this._loggedExtClockUsed = false;
-    this._loggedExtClockFallback = false;
-    this._extClockLogCount = 0;
-
     this.state = 'playing';
-    console.log(`[TabPlayer] resume() — externalClock=${!!this._externalClockFn}, synthMuted=${this._synthMuted}`);
     this.schedulerInterval = setInterval(() => this._scheduler(), SCHEDULE_INTERVAL_MS);
     this._startVisualLoop();
     if (isFluidReady()) this._startFluidInterval();
@@ -291,19 +274,11 @@ export class TabPlayer {
     if (this._externalClockFn) {
       const extTime = this._externalClockFn();
       if (extTime >= 0) {
-        if (!this._loggedExtClockUsed) {
-          console.log(`[getPlaybackTime] Using external clock: ${extTime.toFixed(3)}s`);
-          this._loggedExtClockUsed = true;
-        }
         // Apply same latency compensation to external clock for consistent visual sync
         return Math.max(0, extTime - latencySecs);
       }
       // External clock not ready yet (e.g. YouTube hasn't started),
       // fall through to AudioContext-based calculation
-      if (!this._loggedExtClockFallback) {
-        console.log(`[getPlaybackTime] External clock returned ${extTime}, falling back to AudioContext`);
-        this._loggedExtClockFallback = true;
-      }
     }
 
     if (this.state === 'stopped') return 0;
@@ -607,12 +582,6 @@ export class TabPlayer {
       return;
     }
 
-    // Log once to confirm AudioContext scheduler is being used (not external clock)
-    if (!this._loggedSchedulerType) {
-      console.log('[Scheduler] Using AudioContext clock (no external clock set)');
-      this._loggedSchedulerType = true;
-    }
-
     const ctx = getAudioContext();
     
     // Debug: check for AudioContext issues
@@ -746,15 +715,6 @@ export class TabPlayer {
   _schedulerExternalClock() {
     const currentTime = this._externalClockFn();
     if (currentTime < 0) return; // external clock not ready yet
-
-    // Periodic diagnostic logging
-    if (!this._extClockLogCount) this._extClockLogCount = 0;
-    if (this._extClockLogCount % 40 === 0) { // every ~1 second (25ms * 40)
-      const primary = this.tracks[this.primaryIndex];
-      const nextEvent = primary.timeline[primary.currentIndex];
-      console.log(`[ExtClock] time=${currentTime.toFixed(3)}s, idx=${primary.currentIndex}, nextBeat=${nextEvent ? nextEvent.time.toFixed(3) : 'END'}s`);
-    }
-    this._extClockLogCount++;
 
     const primary = this.tracks[this.primaryIndex];
 

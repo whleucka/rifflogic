@@ -18,15 +18,18 @@ let isReady = false;
 
 /**
  * Search YouTube for tracks matching the query.
- * Automatically appends "lyric video" to prioritize lyric videos.
+ * Searches for more results than requested, then ranks official channels
+ * (VEVO, Topic) higher and returns the top `limit` results.
  * @param {string} artist 
  * @param {string} title 
  * @param {number} limit 
  * @returns {Promise<Array<{id, title, channel, duration, thumbnail}>>}
  */
 export async function searchYouTube(artist, title, limit = 5) {
-  const query = `${artist} ${title} lyric video`;
-  const url = `${API_BASE}/search?q=${encodeURIComponent(query)}&limit=${limit}`;
+  const query = `${artist} ${title}`;
+  // Fetch extra results so we have room to re-rank
+  const fetchLimit = Math.min(limit * 2, 10);
+  const url = `${API_BASE}/search?q=${encodeURIComponent(query)}&limit=${fetchLimit}`;
   
   try {
     const response = await fetch(url);
@@ -34,7 +37,29 @@ export async function searchYouTube(artist, title, limit = 5) {
       throw new Error(`Search failed: ${response.status}`);
     }
     const data = await response.json();
-    return data.results || [];
+    const results = data.results || [];
+
+    // Rank results: prioritize official channels (VEVO, Topic) which have
+    // the exact studio album audio, over fan uploads and live versions.
+    const ranked = results.map(r => {
+      const ch = (r.channel || '').toUpperCase();
+      const t = (r.title || '').toUpperCase();
+      let score = 0;
+      if (ch.includes('VEVO')) score += 20;
+      if (ch.includes('OFFICIAL')) score += 20;
+      if (ch.includes('- TOPIC')) score += 15;
+      if (ch.includes('LYRIC')) score += 10;
+      // Penalize likely non-studio versions
+      if (t.includes('FULL ALBUM')) score -= 10;
+      if (t.includes('LIVE')) score -= 10;
+      if (t.includes('COVER')) score -= 10;
+      if (t.includes('REMIX') || t.includes('MIX')) score -= 5;
+      if (t.includes('ACOUSTIC')) score -= 5;
+      return { ...r, _score: score };
+    });
+
+    ranked.sort((a, b) => b._score - a._score);
+    return ranked.slice(0, limit).map(({ _score, ...r }) => r);
   } catch (err) {
     console.warn('[YouTube] Search failed:', err.message);
     return [];

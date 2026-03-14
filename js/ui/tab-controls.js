@@ -222,8 +222,9 @@ export function renderTabViewer(container) {
         await loadYouTubeAudio(videoId);
         songInfo.textContent = `${score.title} — ${score.artist} — YouTube ready`;
         
-        // Load saved offset for this song/video
+        // Load saved offset and checkpoints for this song/video
         _loadYtOffset();
+        _loadCheckpoints();
       } catch (err) {
         console.error('Failed to load YouTube audio:', err);
         songInfo.textContent = `${score.title} — ${score.artist} — YouTube failed`;
@@ -239,6 +240,7 @@ export function renderTabViewer(container) {
       
       // Reset UI offset display when leaving YouTube voice
       _loadYtOffset();
+      checkpoints = [];
 
       if (voice === VOICE_TYPES.KARPLUS) {
         // "Default Synth" — bypass FluidSynth, use Karplus-Strong for tab playback
@@ -257,7 +259,7 @@ export function renderTabViewer(container) {
     selectedOption.textContent = oldLabel;
     voiceSelect.disabled = false;
 
-    // Show/hide YouTube offset control and auto-sync button
+    // Show/hide YouTube offset control, auto-sync button, and clear checkpoints
     ytOffsetWrap.style.display = youtubeVoiceActive ? '' : 'none';
     autoSyncBtn.style.display = youtubeVoiceActive ? '' : 'none';
 
@@ -393,35 +395,50 @@ export function renderTabViewer(container) {
   }
 
   /**
+   * Reverse mapping: tab timeline time → YouTube time.
+   * Inverse of _ytTimeToTabTime, using the same checkpoint list.
+   */
+  function _tabTimeToYtTime(tabTime) {
+    const cps = [{ tabTime: 0, ytTime: youtubeOffset }, ...checkpoints];
+
+    // Before first checkpoint
+    if (tabTime <= cps[0].tabTime) {
+      return tabTime + cps[0].ytTime;
+    }
+
+    // Between checkpoints: interpolate
+    for (let i = 0; i < cps.length - 1; i++) {
+      if (tabTime <= cps[i + 1].tabTime) {
+        const fraction = (tabTime - cps[i].tabTime) / (cps[i + 1].tabTime - cps[i].tabTime);
+        return cps[i].ytTime + fraction * (cps[i + 1].ytTime - cps[i].ytTime);
+      }
+    }
+
+    // After last checkpoint: extrapolate 1:1
+    const last = cps[cps.length - 1];
+    return last.ytTime + (tabTime - last.tabTime);
+  }
+
+  /**
    * Set up or clear YouTube audio sync callbacks on the player.
    */
   function _updateYouTubeCallbacks() {
     if (youtubeVoiceActive && isYouTubeReady()) {
-      // Set the external clock: YouTube's audioElement is the single source
-      // of truth for timing. This converts audioElement.currentTime (YouTube
-      // position) to timeline position (tab position).
-      //   timelineTime = youtubeTime - youtubeOffset
-      player.setExternalClock(() => {
-        const ytTime = getYouTubeTime();
-        if (ytTime < 0) return -1;
-        return ytTime - youtubeOffset;
-      });
+      // Set the external clock using checkpoint-aware interpolation.
+      // YouTube's audioElement is the single source of truth for timing.
+      _updateExternalClock();
 
       player.setExternalAudioCallbacks({
         onPlay: (startTime) => {
           _clearYtDelayTimeout();
           setYouTubePlaybackRate(player.tempoScale);
           
-          // Compute where YouTube should be relative to tab time
-          // ytTime = tabTime + offset
-          // - Positive offset: YouTube has intro, seek ahead in YouTube
-          // - Negative offset: Tab has intro, delay YouTube start
-          const ytTime = startTime + youtubeOffset;
+          // Use checkpoint-aware mapping to find the YouTube position
+          const ytTime = _tabTimeToYtTime(startTime);
           
-          console.log(`[YT Sync] onPlay: tabTime=${startTime.toFixed(2)}, offset=${youtubeOffset.toFixed(2)}, ytTime=${ytTime.toFixed(2)}`);
+          console.log(`[YT Sync] onPlay: tabTime=${startTime.toFixed(2)}, ytTime=${ytTime.toFixed(2)}, checkpoints=${checkpoints.length}`);
           
           if (ytTime >= 0) {
-            // YouTube should already be playing at this point
             seekYouTube(ytTime);
             playYouTube(ytTime);
           } else {
@@ -445,14 +462,12 @@ export function renderTabViewer(container) {
         },
         onSeek: (time) => {
           _clearYtDelayTimeout();
-          const ytTime = time + youtubeOffset;
+          const ytTime = _tabTimeToYtTime(time);
           
           if (ytTime >= 0) {
             seekYouTube(ytTime);
           } else {
-            // Seeking to before YouTube should start - pause YouTube
             pauseYouTube();
-            // Schedule YouTube to start when tab reaches the right point
             const delayMs = Math.abs(ytTime) * 1000 / player.tempoScale;
             if (player.state === 'playing') {
               ytDelayTimeout = setTimeout(() => {
@@ -553,7 +568,207 @@ export function renderTabViewer(container) {
     }
   });
 
-  renderer.onCanvasClick((index) => transport.actions.handleCanvasClick(index));
+  // --- YouTube sync checkpoints ---
+  // Checkpoints map tab timeline positions to YouTube audio positions.
+  // The user places them when drift occurs: pause, press C, click where
+  // the audio actually is in the tab. On subsequent plays, the external
+  // clock interpolates between checkpoints to warp the tab's timeline
+  // to match the recording's actual tempo variations.
+  let checkpointMode = false;
+  let checkpoints = []; // [{ tabTime, ytTime }] sorted by tabTime
+  let checkpointYtTime = 0; // YouTube time captured when checkpoint mode entered
+
+  function _getCheckpointKey() {
+    if (!score || !youtubeVoiceActive) return null;
+    const videoId = getYouTubeVideoId(voiceSelect.value);
+    if (!videoId) return null;
+    return `yt-checkpoints:${score.artist}:${score.title}:${videoId}`;
+  }
+
+  function _saveCheckpoints() {
+    const key = _getCheckpointKey();
+    if (key) {
+      localStorage.setItem(key, JSON.stringify(checkpoints));
+      console.log(`[Checkpoints] Saved ${checkpoints.length} checkpoints for ${key}`);
+    }
+  }
+
+  function _loadCheckpoints() {
+    const key = _getCheckpointKey();
+    if (key) {
+      const saved = localStorage.getItem(key);
+      if (saved) {
+        try {
+          checkpoints = JSON.parse(saved);
+          console.log(`[Checkpoints] Loaded ${checkpoints.length} checkpoints for ${key}`);
+        } catch (e) {
+          checkpoints = [];
+        }
+      } else {
+        checkpoints = [];
+      }
+    } else {
+      checkpoints = [];
+    }
+    _updateExternalClock();
+    _syncCheckpointMarkers();
+  }
+
+  function _clearCheckpoints() {
+    checkpoints = [];
+    const key = _getCheckpointKey();
+    if (key) localStorage.removeItem(key);
+    _updateExternalClock();
+    _syncCheckpointMarkers();
+    console.log('[Checkpoints] Cleared');
+  }
+
+  function _addCheckpoint(tabTime, ytTime) {
+    // Remove any existing checkpoint close to this tabTime (within 1s)
+    checkpoints = checkpoints.filter(cp => Math.abs(cp.tabTime - tabTime) > 1.0);
+    checkpoints.push({ tabTime, ytTime });
+    checkpoints.sort((a, b) => a.tabTime - b.tabTime);
+    _saveCheckpoints();
+    _updateExternalClock();
+    _syncCheckpointMarkers();
+  }
+
+  /**
+   * Update the renderer's checkpoint markers to match current checkpoints.
+   * Converts tabTime values to beat indices using binary search.
+   */
+  function _syncCheckpointMarkers() {
+    if (!player.timeline) {
+      renderer.setCheckpoints([]);
+      return;
+    }
+    const indices = new Set();
+    for (const cp of checkpoints) {
+      // Find the closest beat index at this tabTime
+      const idx = _findBeatIndexAtTime(cp.tabTime);
+      if (idx >= 0) indices.add(idx);
+    }
+    renderer.setCheckpoints(indices);
+  }
+
+  function _findBeatIndexAtTime(time) {
+    const tl = player.timeline;
+    if (!tl || tl.length === 0) return -1;
+    // Binary search for insertion point
+    let lo = 0, hi = tl.length - 1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >>> 1;
+      if (tl[mid].time < time) lo = mid + 1;
+      else hi = mid - 1;
+    }
+    // lo is the first index >= time. Pick the closest of lo and lo-1.
+    if (lo >= tl.length) return tl.length - 1;
+    if (lo === 0) return 0;
+    const diffLo = Math.abs(tl[lo].time - time);
+    const diffPrev = Math.abs(tl[lo - 1].time - time);
+    return diffPrev <= diffLo ? lo - 1 : lo;
+  }
+
+  /**
+   * Piecewise linear interpolation: given YouTube audio time, return tab timeline time.
+   * Uses the offset as an implicit first checkpoint (tabTime=0, ytTime=offset).
+   * Between checkpoints, linearly interpolates to account for tempo variation.
+   */
+  function _ytTimeToTabTime(currentYtTime) {
+    // Build the effective checkpoint list: offset + user checkpoints
+    const cps = [{ tabTime: 0, ytTime: youtubeOffset }, ...checkpoints];
+
+    // Before first checkpoint
+    if (currentYtTime <= cps[0].ytTime) {
+      return currentYtTime - cps[0].ytTime; // may be negative (before tab starts)
+    }
+
+    // Between checkpoints: interpolate
+    for (let i = 0; i < cps.length - 1; i++) {
+      if (currentYtTime <= cps[i + 1].ytTime) {
+        const fraction = (currentYtTime - cps[i].ytTime) / (cps[i + 1].ytTime - cps[i].ytTime);
+        return cps[i].tabTime + fraction * (cps[i + 1].tabTime - cps[i].tabTime);
+      }
+    }
+
+    // After last checkpoint: extrapolate using the tab's native tempo
+    // (i.e. 1:1 mapping from the last checkpoint onward)
+    const last = cps[cps.length - 1];
+    return last.tabTime + (currentYtTime - last.ytTime);
+  }
+
+  /**
+   * Update the external clock function based on current checkpoints.
+   */
+  function _updateExternalClock() {
+    if (youtubeVoiceActive && isYouTubeReady()) {
+      player.setExternalClock(() => {
+        const ytTime = getYouTubeTime();
+        if (ytTime < 0) return -1;
+        return _ytTimeToTabTime(ytTime);
+      });
+    }
+  }
+
+  function _enterCheckpointMode() {
+    if (!youtubeVoiceActive || !isYouTubeReady()) return;
+    if (player.state !== 'paused') return;
+
+    // Capture the YouTube time at the moment the user enters checkpoint mode
+    checkpointYtTime = getYouTubeTime();
+    if (checkpointYtTime < 0) return;
+
+    checkpointMode = true;
+    renderer.overlayCanvas.style.cursor = 'crosshair';
+    songInfo.textContent = 'Click where the audio is in the tab...';
+    console.log(`[Checkpoints] Mode entered — ytTime=${checkpointYtTime.toFixed(2)}s`);
+  }
+
+  function _exitCheckpointMode() {
+    checkpointMode = false;
+    renderer.overlayCanvas.style.cursor = '';
+    if (score) {
+      songInfo.textContent = `${score.title} — ${score.artist}`;
+    }
+  }
+
+  function _handleCheckpointClick(index) {
+    if (!checkpointMode) return false;
+
+    // The user clicked beat `index` — get its tab timeline time
+    const event = player.timeline[index];
+    if (!event) {
+      _exitCheckpointMode();
+      return true;
+    }
+
+    const tabTime = event.time;
+    _addCheckpoint(tabTime, checkpointYtTime);
+
+    console.log(`[Checkpoints] Added: tabTime=${tabTime.toFixed(2)}s ↔ ytTime=${checkpointYtTime.toFixed(2)}s (${checkpoints.length} total)`);
+
+    // Brief visual feedback
+    const prevText = songInfo.textContent;
+    songInfo.textContent = `Checkpoint set (${checkpoints.length} total)`;
+    setTimeout(() => {
+      if (score) songInfo.textContent = `${score.title} — ${score.artist}`;
+    }, 1500);
+
+    _exitCheckpointMode();
+
+    // Seek to the clicked position and resume
+    player.resyncToTime(tabTime);
+    player.seekTo(index);
+    renderer.setCursor(index);
+    transport.actions.togglePlayPause(); // resume
+
+    return true; // consumed the click
+  }
+
+  renderer.onCanvasClick((index) => {
+    if (_handleCheckpointClick(index)) return;
+    transport.actions.handleCanvasClick(index);
+  });
 
   // --- Keyboard shortcuts ---
   document.addEventListener('keydown', (e) => {
@@ -576,7 +791,9 @@ export function renderTabViewer(container) {
         break;
       case 'Escape':
         e.preventDefault();
-        if (isFocusedMode) {
+        if (checkpointMode) {
+          _exitCheckpointMode();
+        } else if (isFocusedMode) {
           exitFocusedMode();
         } else {
           posDisplay.textContent = transport.actions.doStop();
@@ -587,6 +804,21 @@ export function renderTabViewer(container) {
         if (isFocusedMode) {
           e.preventDefault();
           toggleFretboard();
+        }
+        break;
+      case 'KeyC':
+        if (youtubeVoiceActive && e.shiftKey) {
+          // Shift+C: Clear all checkpoints for this song
+          e.preventDefault();
+          _clearCheckpoints();
+          songInfo.textContent = 'Checkpoints cleared';
+          setTimeout(() => {
+            if (score) songInfo.textContent = `${score.title} — ${score.artist}`;
+          }, 1500);
+        } else if (youtubeVoiceActive && player.state === 'paused') {
+          // C: Enter checkpoint mode
+          e.preventDefault();
+          _enterCheckpointMode();
         }
         break;
     }
