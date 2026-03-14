@@ -53,6 +53,12 @@ export class TabPlayer {
 
     // When true, mute all synth audio (for YouTube backing mode)
     this._synthMuted = false;
+
+    // External clock source (for YouTube mode).
+    // When set, this function returns the current playback time in timeline
+    // seconds, replacing AudioContext.currentTime as the master clock.
+    // This eliminates drift by having a single source of truth.
+    this._externalClockFn = null;
   }
 
   /**
@@ -84,6 +90,21 @@ export class TabPlayer {
    */
   setSynthMuted(muted) {
     this._synthMuted = muted;
+  }
+
+  /**
+   * Set an external clock function for YouTube mode.
+   * The function should return the current playback time in timeline seconds
+   * (i.e. audioElement.currentTime - youtubeOffset), or -1 if not available.
+   * When set, this becomes the single source of truth for all timing,
+   * eliminating clock drift between AudioContext and HTMLAudioElement.
+   * @param {Function|null} fn - () => number (timeline seconds) or null to use AudioContext
+   */
+  setExternalClock(fn) {
+    this._externalClockFn = fn;
+    this._loggedSchedulerType = false; // reset so next scheduler call logs its type
+    this._extClockLogCount = 0;
+    console.log(`[TabPlayer] External clock ${fn ? 'SET' : 'CLEARED'}`);
   }
 
   /** Primary track shortcuts */
@@ -163,7 +184,14 @@ export class TabPlayer {
     this._pendingFluidAudio = [];
     this._stopFluidInterval();
 
+    // Reset diagnostic log flags
+    this._loggedSchedulerType = false;
+    this._loggedExtClockUsed = false;
+    this._loggedExtClockFallback = false;
+    this._extClockLogCount = 0;
+
     this.state = 'playing';
+    console.log(`[TabPlayer] play() — externalClock=${!!this._externalClockFn}, synthMuted=${this._synthMuted}`);
     this.schedulerInterval = setInterval(() => this._scheduler(), SCHEDULE_INTERVAL_MS);
     this._startVisualLoop();
     if (isFluidReady()) this._startFluidInterval();
@@ -202,7 +230,14 @@ export class TabPlayer {
     this._pendingFluidAudio = [];
     this._stopFluidInterval();
 
+    // Reset diagnostic log flags
+    this._loggedSchedulerType = false;
+    this._loggedExtClockUsed = false;
+    this._loggedExtClockFallback = false;
+    this._extClockLogCount = 0;
+
     this.state = 'playing';
+    console.log(`[TabPlayer] resume() — externalClock=${!!this._externalClockFn}, synthMuted=${this._synthMuted}`);
     this.schedulerInterval = setInterval(() => this._scheduler(), SCHEDULE_INTERVAL_MS);
     this._startVisualLoop();
     if (isFluidReady()) this._startFluidInterval();
@@ -211,36 +246,34 @@ export class TabPlayer {
     if (this._onPlay) this._onPlay(eventTime);
   }
 
-  stop() {
-    this.state = 'stopped';
-    this._clearScheduler();
-    this._stopVisualLoop();
-    this._pendingVisuals = [];
-    this._pendingFluidAudio = [];
-    this._stopFluidInterval();
-    for (const t of this.tracks) t.currentIndex = 0;
-    if (isFluidReady()) fluidAllNotesOff();
-    events.emit(TAB_STOP);
-
-    // Notify external audio (YouTube)
-    if (this._onStop) this._onStop();
-  }
-
-  /**
-   * Clean up all intervals, rAF, and state.
-   */
-  destroy() {
-    this.stop();
-    this.tracks = [];
-  }
-
   /**
    * Returns the current playback time in the timeline's time space (seconds).
-   * Accounts for audio output latency so visuals sync with audible sound.
+   * In YouTube mode, reads directly from the audio element (single clock source).
+   * In synth mode, uses AudioContext and accounts for audio output latency.
    * Returns -1 if not playing.
    */
   getPlaybackTime() {
     if (this.state !== 'playing') return -1;
+
+    // External clock mode (YouTube): read directly from the audio element.
+    // This is the single source of truth — no drift possible.
+    if (this._externalClockFn) {
+      const extTime = this._externalClockFn();
+      if (extTime >= 0) {
+        if (!this._loggedExtClockUsed) {
+          console.log(`[getPlaybackTime] Using external clock: ${extTime.toFixed(3)}s`);
+          this._loggedExtClockUsed = true;
+        }
+        return extTime;
+      }
+      // External clock not ready yet (e.g. YouTube hasn't started),
+      // fall through to AudioContext-based calculation
+      if (!this._loggedExtClockFallback) {
+        console.log(`[getPlaybackTime] External clock returned ${extTime}, falling back to AudioContext`);
+        this._loggedExtClockFallback = true;
+      }
+    }
+
     const ctx = getAudioContext();
     const rawTime = (ctx.currentTime - this.startTime) * this.tempoScale;
     
@@ -317,6 +350,21 @@ export class TabPlayer {
 
     // Notify external audio (YouTube)
     if (this._onSeek) this._onSeek(eventTime);
+  }
+
+  /**
+   * Re-sync the scheduler's currentIndex to match a given timeline time.
+   * Used when the offset mapping changes (e.g. YouTube offset slider)
+   * without the audio position changing.
+   */
+  resyncToTime(time) {
+    if (!this.timeline) return;
+    this.currentIndex = this._findIndexAtTime(this.timeline, time);
+    for (let i = 0; i < this.tracks.length; i++) {
+      if (i === this.primaryIndex) continue;
+      this.tracks[i].currentIndex = this._findIndexAtTime(this.tracks[i].timeline, time);
+    }
+    this._syncMetronome(time);
   }
 
   // --- Internal helpers ---
@@ -526,6 +574,20 @@ export class TabPlayer {
   _scheduler() {
     if (this.state !== 'playing' || !this.timeline) return;
 
+    // In external clock mode (YouTube), use a simplified scheduler that
+    // reads the current position directly from the audio element.
+    // This eliminates drift by deriving all timing from a single clock.
+    if (this._externalClockFn) {
+      this._schedulerExternalClock();
+      return;
+    }
+
+    // Log once to confirm AudioContext scheduler is being used (not external clock)
+    if (!this._loggedSchedulerType) {
+      console.log('[Scheduler] Using AudioContext clock (no external clock set)');
+      this._loggedSchedulerType = true;
+    }
+
     const ctx = getAudioContext();
     
     // Debug: check for AudioContext issues
@@ -640,6 +702,96 @@ export class TabPlayer {
           this._scheduleTrackAudio(track, scaledTime, event, BACKING_GAIN, i);
           track.currentIndex++;
         }
+      }
+    }
+
+    // End of primary timeline
+    if (primary.currentIndex >= primary.timeline.length) {
+      this.stop();
+    }
+  }
+
+  /**
+   * Simplified scheduler for external clock mode (YouTube).
+   * Instead of the lookahead-based scheduling pattern used for AudioContext,
+   * this reads the current timeline position directly from the external clock
+   * and immediately emits visual events for any beats that have been reached.
+   * No audio scheduling is needed (synth is muted in YouTube mode).
+   */
+  _schedulerExternalClock() {
+    const currentTime = this._externalClockFn();
+    if (currentTime < 0) return; // external clock not ready yet
+
+    // Periodic diagnostic logging
+    if (!this._extClockLogCount) this._extClockLogCount = 0;
+    if (this._extClockLogCount % 40 === 0) { // every ~1 second (25ms * 40)
+      const primary = this.tracks[this.primaryIndex];
+      const nextEvent = primary.timeline[primary.currentIndex];
+      console.log(`[ExtClock] time=${currentTime.toFixed(3)}s, idx=${primary.currentIndex}, nextBeat=${nextEvent ? nextEvent.time.toFixed(3) : 'END'}s`);
+    }
+    this._extClockLogCount++;
+
+    const primary = this.tracks[this.primaryIndex];
+
+    // --- Emit visuals for beats at or before current time ---
+    while (primary.currentIndex < primary.timeline.length) {
+      const event = primary.timeline[primary.currentIndex];
+
+      // Event is in the future — stop here
+      if (event.time > currentTime) break;
+
+      // Emit visual events immediately (no queue needed — we're already
+      // at or past this point in the audio)
+      const idx = primary.currentIndex;
+      const mbIndex = event.masterBarIndex;
+      const measure = primary.measureMap.get(mbIndex);
+      const measureNotes = [];
+      if (measure) {
+        for (const bi of measure.beatIndices) {
+          const b = primary.timeline[bi];
+          if (b) {
+            for (const n of b.notes) {
+              if (!n.tieDestination) measureNotes.push(n);
+            }
+          }
+        }
+      }
+
+      // Beat off for previous
+      if (idx > 0) {
+        events.emit(TAB_BEAT_OFF, { index: idx - 1 });
+      }
+
+      events.emit(TAB_BEAT_ON, {
+        index: idx,
+        notes: event.notes,
+        measureNotes,
+        masterBarIndex: mbIndex,
+      });
+      events.emit(TAB_POSITION, {
+        currentIndex: idx,
+        totalBeats: primary.timeline.length,
+        masterBarIndex: mbIndex,
+        totalBars: primary.measures.length,
+      });
+
+      primary.currentIndex++;
+
+      // Loop handling
+      if (this.loopB !== null && primary.currentIndex > this.loopB) {
+        const loopStart = this.loopA !== null ? this.loopA : 0;
+        primary.currentIndex = loopStart;
+
+        for (let i = 0; i < this.tracks.length; i++) {
+          if (i === this.primaryIndex) continue;
+          const restartTime = primary.timeline[loopStart].time;
+          this.tracks[i].currentIndex = this._findIndexAtTime(this.tracks[i].timeline, restartTime);
+        }
+        this._syncMetronome(primary.timeline[loopStart].time);
+
+        // Notify external audio to seek back to loop start
+        if (this._onSeek) this._onSeek(primary.timeline[loopStart].time);
+        break;
       }
     }
 

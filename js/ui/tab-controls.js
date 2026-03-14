@@ -7,7 +7,7 @@ import { initFluidSynth, isFluidReady, isFluidLoading, assignChannels, fluidSetV
 import {
   searchYouTube, isProxyAvailable, loadYouTubeAudio, playYouTube,
   pauseYouTube, stopYouTube, seekYouTube, setYouTubePlaybackRate,
-  isYouTubeReady, unloadYouTube, getCurrentVideoId
+  isYouTubeReady, unloadYouTube, getCurrentVideoId, getYouTubeTime
 } from '../audio/youtube-audio.js';
 import { autoSync, cancelAnalysis } from '../audio/audio-analysis.js';
 import { events, TAB_LOADED, TAB_BEAT_ON, TAB_POSITION, TAB_STOP, TUNING_CHANGE } from '../events.js';
@@ -127,19 +127,12 @@ export function renderTabViewer(container) {
       ytOffsetValue.textContent = "0.0s";
       _saveYtOffset();
       
-      // If playing, re-sync YouTube
+      // If playing, re-sync scheduler to new offset mapping
       if (player.state === 'playing' && isYouTubeReady()) {
         _clearYtDelayTimeout();
         const currentTime = player.getPlaybackTime();
         if (currentTime >= 0) {
-          const ytTime = currentTime + youtubeOffset;
-          if (ytTime >= 0) {
-            seekYouTube(ytTime);
-            playYouTube(ytTime);
-          } else {
-            pauseYouTube();
-            _startDelayTimer(Math.abs(ytTime));
-          }
+          player.resyncToTime(currentTime);
         }
       }
     });
@@ -280,24 +273,16 @@ export function renderTabViewer(container) {
     // Save to localStorage when offset changes
     _saveYtOffset();
     
-    // If playing, re-sync YouTube to current position with new offset
+    // If playing, re-sync the tab cursor to the new offset mapping.
+    // The YouTube audio position doesn't change — only the mapping between
+    // YouTube time and tab time shifts. Re-sync the scheduler index so it
+    // matches the new timeline position.
     if (player.state === 'playing' && isYouTubeReady()) {
       _clearYtDelayTimeout();
       const currentTime = player.getPlaybackTime();
       if (currentTime >= 0) {
-        const ytTime = currentTime + youtubeOffset;
-        if (ytTime >= 0) {
-          seekYouTube(ytTime);
-        } else {
-          // YouTube shouldn't be playing yet
-          pauseYouTube();
-          const delayMs = Math.abs(ytTime) * 1000 / player.tempoScale;
-          ytDelayTimeout = setTimeout(() => {
-            if (player.state === 'playing') {
-              playYouTube(0);
-            }
-          }, delayMs);
-        }
+        // Re-sync scheduler index to match new timeline position
+        player.resyncToTime(currentTime);
       }
     }
   });
@@ -366,18 +351,12 @@ export function renderTabViewer(container) {
         
         console.log(`[AutoSync] Applied offset: ${result.offset.toFixed(2)}s (confidence: ${(result.confidence * 100).toFixed(1)}%)`);
         
-        // If playing, re-sync YouTube to new offset
+        // If playing, re-sync scheduler to new offset mapping
         if (player.state === 'playing' && isYouTubeReady()) {
           _clearYtDelayTimeout();
           const currentTime = player.getPlaybackTime();
           if (currentTime >= 0) {
-            const ytTime = currentTime + youtubeOffset;
-            if (ytTime >= 0) {
-              seekYouTube(ytTime);
-            } else {
-              pauseYouTube();
-              _startDelayTimer(Math.abs(ytTime));
-            }
+            player.resyncToTime(currentTime);
           }
         }
       } else {
@@ -418,6 +397,16 @@ export function renderTabViewer(container) {
    */
   function _updateYouTubeCallbacks() {
     if (youtubeVoiceActive && isYouTubeReady()) {
+      // Set the external clock: YouTube's audioElement is the single source
+      // of truth for timing. This converts audioElement.currentTime (YouTube
+      // position) to timeline position (tab position).
+      //   timelineTime = youtubeTime - youtubeOffset
+      player.setExternalClock(() => {
+        const ytTime = getYouTubeTime();
+        if (ytTime < 0) return -1;
+        return ytTime - youtubeOffset;
+      });
+
       player.setExternalAudioCallbacks({
         onPlay: (startTime) => {
           _clearYtDelayTimeout();
@@ -479,6 +468,7 @@ export function renderTabViewer(container) {
         },
       });
     } else {
+      player.setExternalClock(null);
       player.clearExternalAudioCallbacks();
     }
   }
