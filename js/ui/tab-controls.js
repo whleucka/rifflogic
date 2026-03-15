@@ -1139,6 +1139,7 @@ export function renderTabViewer(container) {
     player.setPrimary(trackDataIdx);
     updateRenderer();
     mixer.updateMixerUI(allTrackData, selectedTrackIndex);
+    _syncCheckpointMarkers();
   }
 
   function updateRenderer() {
