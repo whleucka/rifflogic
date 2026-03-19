@@ -45,7 +45,7 @@
 }
 
 .fb-hit-area:hover {
-  fill: rgba(79, 195, 247, 0.1);
+  fill: var(--accent-blue-dim);
 }
 
 /* Note circles */

@@ -5,10 +5,14 @@
   overflow: hidden;
 }
 
+/* ========================================
+   Toolbar
+   ======================================== */
+
 #toolbar {
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
-  padding: 0 1rem;
+  padding: 0 var(--space-lg);
   flex-shrink: 0;
 }
 
@@ -16,61 +20,72 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.75rem 0;
+  padding: var(--space-md) 0;
   max-width: 1600px;
   margin: 0 auto;
   flex-wrap: wrap;
-  gap: 0.75rem;
+  gap: var(--space-md);
   width: 100%;
 }
 
 .toolbar-title {
   font-family: var(--font-title);
-  font-size: 1.75rem;
+  font-size: var(--text-xl);
   color: var(--accent-gold);
   letter-spacing: 0.05em;
   white-space: nowrap;
-  text-shadow: 0 0 10px rgba(224, 175, 104, 0.2);
+  text-shadow: 0 0 20px rgba(224, 175, 104, 0.15);
 }
 
 .toolbar-nav {
   display: flex;
-  gap: 0.25rem;
-  flex-wrap: wrap;
+  gap: 2px;
+  background: var(--bg-surface);
+  border-radius: var(--radius);
+  padding: 3px;
 }
 
 .toolbar-tab {
-  padding: 0.4rem 1rem;
-  border-radius: var(--radius) var(--radius) 0 0;
+  padding: 0.4rem 1.1rem;
+  border-radius: calc(var(--radius) - 1px);
   background: transparent;
   color: var(--text-muted);
-  font-size: 0.85rem;
+  font-size: var(--text-base);
   font-weight: 600;
-  border: 1px solid transparent;
-  border-bottom: none;
+  border: none;
   transition: all var(--transition);
   cursor: pointer;
 }
 
 .toolbar-tab:hover {
-  color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-secondary);
+  background: var(--bg-hover);
 }
 
 .toolbar-tab.active {
-  color: var(--accent-blue);
-  background: var(--bg-primary);
-  border-color: var(--border-color);
+  color: var(--text-primary);
+  background: var(--accent-blue);
+  color: var(--note-text);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
 }
+
+.toolbar-tab:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* ========================================
+   Main Layout
+   ======================================== */
 
 #main {
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 1.5rem 1rem;
-  gap: 1.5rem;
-  overflow: hidden; /* Prevent global scrollbar, rely on internal scrolls */
+  padding: var(--space-xl) var(--space-lg);
+  gap: var(--space-xl);
+  overflow: hidden;
   width: 100%;
 }
 
@@ -132,7 +147,7 @@ body.tabs-focused .tab-canvas-container {
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-  padding: 0.75rem 1rem;
+  padding: var(--space-md) var(--space-lg);
   transform: translateY(-100%);
   transition: transform 0.3s ease;
   display: none;
@@ -181,9 +196,9 @@ body.tabs-focused .fretboard-overlay {
 .view-panel {
   display: flex;
   flex-wrap: wrap;
-  gap: 1.5rem;
+  gap: var(--space-xl);
   justify-content: center;
-  overflow-y: auto; /* Default scroll for Scales/Chords */
+  overflow-y: auto;
   width: 100%;
 }
 
@@ -192,139 +207,296 @@ body.tabs-focused .fretboard-overlay {
 }
 
 #view-tabs {
-  flex: 1; /* Only tabs view fills viewport height */
+  flex: 1;
   display: flex;
   flex-direction: column;
   width: 100%;
-  overflow: hidden; /* Tabs manage their own scroll */
+  overflow: hidden;
 }
 
 #view-tabs.hidden {
   display: none;
 }
 
+/* ========================================
+   Control Groups (cards)
+   ======================================== */
+
 .control-group {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius);
-  padding: 1rem 1.25rem;
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg) 1.25rem;
   box-shadow: var(--shadow);
 }
 
 .control-group h3 {
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   color: var(--text-muted);
-  margin-bottom: 0.75rem;
+  margin-bottom: var(--space-md);
 }
 
-.note-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-}
+/* ========================================
+   Shared Button Base
+   ======================================== */
 
-.note-btn {
-  width: 2.5rem;
-  height: 2.5rem;
+.toggle-btn,
+.note-btn,
+.caged-btn {
   border-radius: var(--radius);
   background: var(--bg-surface);
   color: var(--text-primary);
-  font-size: 0.85rem;
+  font-size: var(--text-base);
   font-weight: 600;
   border: 1px solid var(--border-color);
-  transition: background var(--transition), color var(--transition), border-color var(--transition);
+  transition: background var(--transition), color var(--transition), border-color var(--transition), box-shadow var(--transition);
+  cursor: pointer;
 }
 
-.note-btn:hover {
-  background: var(--accent-blue);
-  color: var(--note-text);
+.toggle-btn:hover,
+.note-btn:hover,
+.caged-btn:hover {
   border-color: var(--accent-blue);
+  background: var(--accent-blue-dim);
+  color: var(--accent-blue);
 }
 
-.note-btn.active {
-  background: var(--accent-red);
-  color: #fff;
-  border-color: var(--accent-red);
+.toggle-btn:focus-visible,
+.note-btn:focus-visible,
+.caged-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
-.volume-control {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
+.toggle-btn:active,
+.note-btn:active,
+.caged-btn:active {
+  transform: scale(0.97);
 }
 
-.volume-control label {
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-  white-space: nowrap;
-}
-
-.volume-control input[type="range"] {
-  width: 120px;
-  accent-color: var(--accent-blue);
-}
-
-.toggle-control {
-  margin-top: 0.8rem;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
+/* ========================================
+   Toggle Buttons
+   ======================================== */
 
 .toggle-btn {
-  padding: 0.5rem 1rem;
-  border-radius: var(--radius);
-  background: var(--bg-surface);
-  color: var(--text-primary);
-  font-size: 0.85rem;
-  border: 1px solid var(--border-color);
-  transition: background var(--transition), color var(--transition);
+  padding: 0.45rem var(--space-lg);
 }
 
 .toggle-btn.active {
   background: var(--accent-green);
   color: var(--note-text);
   border-color: var(--accent-green);
+  box-shadow: 0 0 8px var(--accent-green-dim);
 }
 
-.tuning-control {
-  margin-top: 0.8rem;
+.toggle-btn.active:hover {
+  background: var(--accent-green);
+  filter: brightness(1.1);
+  color: var(--note-text);
+}
+
+/* ========================================
+   Note Highlight Buttons
+   ======================================== */
+
+.note-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+.note-btn {
+  width: 2.5rem;
+  height: 2.5rem;
+}
+
+.note-btn.active {
+  background: var(--accent-red);
+  color: #fff;
+  border-color: var(--accent-red);
+  box-shadow: 0 0 8px var(--accent-red-dim);
+}
+
+.note-btn.active:hover {
+  background: var(--accent-red);
+  filter: brightness(1.1);
+  color: #fff;
+}
+
+/* ========================================
+   CAGED / Small Buttons
+   ======================================== */
+
+.caged-btn {
+  width: 2.2rem;
+  height: 2.2rem;
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.caged-btn.active {
+  background: var(--accent-blue);
+  color: var(--note-text);
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 8px var(--accent-blue-dim);
+}
+
+.caged-btn.active:hover {
+  background: var(--accent-blue);
+  filter: brightness(1.1);
+  color: var(--note-text);
+}
+
+/* ========================================
+   Volume & Toggle Controls
+   ======================================== */
+
+.volume-control {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: var(--space-md);
+}
+
+.volume-control label {
+  font-size: var(--text-base);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.toggle-control {
+  margin-top: var(--space-md);
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+/* ========================================
+   Custom Range Slider
+   ======================================== */
+
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  background: var(--bg-surface);
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+  border: 1px solid var(--border-color);
+  transition: border-color var(--transition);
+}
+
+input[type="range"]:hover {
+  border-color: var(--accent-blue);
+}
+
+input[type="range"]:focus-visible {
+  box-shadow: var(--focus-ring);
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent-blue);
+  border: 2px solid var(--bg-secondary);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  transition: transform var(--transition), box-shadow var(--transition);
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+  box-shadow: 0 0 8px var(--accent-blue-dim);
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent-blue);
+  border: 2px solid var(--bg-secondary);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+}
+
+.volume-control input[type="range"] {
+  width: 120px;
+}
+
+/* ========================================
+   Custom Select Dropdown
+   ======================================== */
+
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-color: var(--bg-surface);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%237aa2f7' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.6rem center;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  font-family: var(--font-main);
+  font-size: var(--text-base);
+  font-weight: 500;
+  padding: 0.45rem 1.8rem 0.45rem 0.75rem;
+  cursor: pointer;
+  transition: all var(--transition);
+  min-width: 100px;
+}
+
+select:hover {
+  border-color: var(--accent-blue);
+  background-color: var(--bg-surface-alt);
+}
+
+select:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 2px var(--accent-blue-dim);
+}
+
+select:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+select option {
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+/* ========================================
+   Tuning Control
+   ======================================== */
+
+.tuning-control {
+  margin-top: var(--space-md);
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
 }
 
 .tuning-control label {
-  font-size: 0.85rem;
+  font-size: var(--text-base);
   color: var(--text-secondary);
   white-space: nowrap;
 }
 
 .tuning-select {
-  padding: 0.4rem 0.6rem;
-  border-radius: var(--radius);
-  background: var(--bg-surface);
-  color: var(--text-primary);
-  font-size: 0.85rem;
-  border: 1px solid var(--border-color);
   font-family: var(--font-mono);
   min-width: 200px;
-  cursor: pointer;
-  transition: border-color var(--transition);
 }
 
-.tuning-select:hover {
-  border-color: var(--accent-blue);
-}
+/* ========================================
+   Scale Selector
+   ======================================== */
 
-.tuning-select:focus {
-  outline: none;
-  border-color: var(--accent-blue);
-}
-
-/* Scale selector */
 .scale-selector-group {
   flex: 1 1 100%;
   max-width: 600px;
@@ -332,92 +504,69 @@ body.tabs-focused .fretboard-overlay {
 
 .scale-selector-row {
   display: flex;
-  gap: 0.5rem;
+  gap: var(--space-sm);
   align-items: center;
   flex-wrap: wrap;
-  margin-bottom: 0.75rem;
+  margin-bottom: var(--space-md);
 }
 
 .scale-select {
-  padding: 0.45rem 0.75rem;
-  border-radius: var(--radius);
-  background: var(--bg-surface);
-  color: var(--text-primary);
-  border: 1px solid var(--border-color);
-  font-size: 0.85rem;
   min-width: 100px;
-  cursor: pointer;
-}
-
-.scale-select:focus {
-  outline: none;
-  border-color: var(--accent-blue);
-}
-
-.scale-select option {
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-}
-
-/* CAGED position stepper */
-.caged-row {
-  display: flex;
-  gap: 0.4rem;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.caged-label {
-  font-size: 0.8rem;
-  color: var(--text-muted);
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  margin-right: 0.25rem;
-}
-
-.caged-btn {
-  width: 2.2rem;
-  height: 2.2rem;
-  border-radius: var(--radius);
-  background: var(--bg-surface);
-  color: var(--text-primary);
-  font-size: 0.8rem;
-  font-weight: 700;
-  border: 1px solid var(--border-color);
-  transition: background var(--transition), color var(--transition), border-color var(--transition);
 }
 
 .play-scale-btn {
   min-width: 3.5rem;
 }
 
-.caged-btn:hover {
-  border-color: var(--accent-blue);
-  color: var(--accent-blue);
+/* ========================================
+   CAGED Position Stepper
+   ======================================== */
+
+.caged-row {
+  display: flex;
+  gap: var(--space-xs);
+  align-items: center;
+  flex-wrap: wrap;
 }
 
-.caged-btn.active {
-  background: var(--accent-blue);
-  color: var(--note-text);
-  border-color: var(--accent-blue);
+.caged-label {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  margin-right: var(--space-xs);
 }
+
+/* ========================================
+   Responsive
+   ======================================== */
 
 @media (max-width: 768px) {
   #main {
-    padding: 1rem 0.5rem;
+    padding: var(--space-lg) var(--space-sm);
   }
 
   .note-btn {
     width: 2.2rem;
     height: 2.2rem;
-    font-size: 0.75rem;
+    font-size: var(--text-xs);
   }
 
   #toolbar {
-    padding: 0.5rem 1rem;
+    padding: var(--space-sm) var(--space-lg);
   }
 
   .toolbar-title {
-    font-size: 1.1rem;
+    font-size: var(--text-lg);
+  }
+
+  .toolbar-nav {
+    gap: 1px;
+    padding: 2px;
+  }
+
+  .toolbar-tab {
+    padding: 0.35rem 0.75rem;
+    font-size: var(--text-sm);
   }
 }

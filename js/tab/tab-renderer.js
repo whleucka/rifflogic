@@ -74,15 +74,150 @@ export class TabRenderer {
 
     // Click handler
     this._onCanvasClickHandler = null;
+    this._wasDrag = false;
     this._clickListener = (e) => {
+      if (this._wasDrag) {
+        this._wasDrag = false;
+        return; // Suppress click after drag
+      }
       if (this._onCanvasClickHandler) this._onCanvasClickHandler(e);
     };
     this.overlayCanvas.addEventListener('click', this._clickListener);
+
+    // Drag-to-select loop (Songsterr-style)
+    this._dragState = null; // { startMeasureIdx, currentMeasureIdx, startX, startY }
+    this._onDragSelectHandler = null;
+    this._DRAG_THRESHOLD = 8; // pixels before drag activates
+
+    this._mousedownListener = (e) => {
+      if (this._playing || !this.track) return;
+      const { canvasX, canvasY } = this._eventToCanvas(e);
+      const measureIdx = this._getMeasureIndexAtPoint(canvasX, canvasY);
+      if (measureIdx < 0) return;
+      this._dragState = {
+        startMeasureIdx: measureIdx,
+        currentMeasureIdx: measureIdx,
+        startX: e.clientX,
+        startY: e.clientY,
+        activated: false,
+      };
+    };
+
+    // Auto-scroll during drag
+    this._autoScrollRafId = null;
+    this._AUTO_SCROLL_ZONE = 60; // pixels from edge to trigger scroll
+    this._AUTO_SCROLL_SPEED = 8; // pixels per frame
+
+    this._startAutoScroll = (e) => {
+      if (this._autoScrollRafId) return;
+      const tick = () => {
+        if (!this._dragState || !this._dragState.activated) {
+          this._stopAutoScroll();
+          return;
+        }
+        const wrapRect = this.wrap.getBoundingClientRect();
+        const mouseY = this._dragState._lastClientY;
+        const distFromTop = mouseY - wrapRect.top;
+        const distFromBottom = wrapRect.bottom - mouseY;
+
+        let scrollDelta = 0;
+        if (distFromTop < this._AUTO_SCROLL_ZONE) {
+          scrollDelta = -this._AUTO_SCROLL_SPEED * (1 - distFromTop / this._AUTO_SCROLL_ZONE);
+        } else if (distFromBottom < this._AUTO_SCROLL_ZONE) {
+          scrollDelta = this._AUTO_SCROLL_SPEED * (1 - distFromBottom / this._AUTO_SCROLL_ZONE);
+        }
+
+        if (scrollDelta !== 0) {
+          this.wrap.scrollTop += scrollDelta;
+          // Re-evaluate measure under cursor after scroll
+          this._updateDragMeasure();
+        }
+        this._autoScrollRafId = requestAnimationFrame(tick);
+      };
+      this._autoScrollRafId = requestAnimationFrame(tick);
+    };
+
+    this._stopAutoScroll = () => {
+      if (this._autoScrollRafId) {
+        cancelAnimationFrame(this._autoScrollRafId);
+        this._autoScrollRafId = null;
+      }
+    };
+
+    this._updateDragMeasure = () => {
+      if (!this._dragState || !this._dragState.activated) return;
+      // Re-use _eventToCanvas with stored mouse position — getBoundingClientRect
+      // updates as the wrap scrolls, so canvas coords stay correct
+      const { canvasX, canvasY } = this._eventToCanvas({
+        clientX: this._dragState._lastClientX,
+        clientY: this._dragState._lastClientY,
+      });
+      const measureIdx = this._getMeasureIndexAtPoint(canvasX, canvasY);
+      if (measureIdx >= 0 && measureIdx !== this._dragState.currentMeasureIdx) {
+        this._dragState.currentMeasureIdx = measureIdx;
+        this._needsFullOverlayRedraw = true;
+        this._renderOverlay();
+      }
+    };
+
+    this._mousemoveForDragListener = (e) => {
+      if (!this._dragState || !this.track) return;
+
+      // Check drag threshold
+      if (!this._dragState.activated) {
+        const dx = e.clientX - this._dragState.startX;
+        const dy = e.clientY - this._dragState.startY;
+        if (Math.abs(dx) < this._DRAG_THRESHOLD && Math.abs(dy) < this._DRAG_THRESHOLD) return;
+        this._dragState.activated = true;
+        this.overlayCanvas.classList.add('dragging');
+        this._startAutoScroll();
+      }
+
+      // Track mouse position for auto-scroll
+      this._dragState._lastClientX = e.clientX;
+      this._dragState._lastClientY = e.clientY;
+
+      const { canvasX, canvasY } = this._eventToCanvas(e);
+      const measureIdx = this._getMeasureIndexAtPoint(canvasX, canvasY);
+      if (measureIdx < 0) return;
+      if (measureIdx !== this._dragState.currentMeasureIdx) {
+        this._dragState.currentMeasureIdx = measureIdx;
+        this._needsFullOverlayRedraw = true;
+        this._renderOverlay();
+      }
+    };
+
+    this._mouseupListener = (e) => {
+      if (!this._dragState) return;
+      const state = this._dragState;
+      this._dragState = null;
+      this._stopAutoScroll();
+
+      this.overlayCanvas.classList.remove('dragging');
+
+      if (!state.activated) return; // Was just a click, not a drag
+
+      this._wasDrag = true;
+      this._needsFullOverlayRedraw = true;
+      this._renderOverlay();
+
+      const start = Math.min(state.startMeasureIdx, state.currentMeasureIdx);
+      const end = Math.max(state.startMeasureIdx, state.currentMeasureIdx);
+
+      if (this._onDragSelectHandler) {
+        this._onDragSelectHandler(start, end);
+      }
+    };
+
+    this.overlayCanvas.addEventListener('mousedown', this._mousedownListener);
+    document.addEventListener('mousemove', this._mousemoveForDragListener);
+    document.addEventListener('mouseup', this._mouseupListener);
 
     // Hover cursor state
     this._hoverIndex = -1;
     this._moveListener = (e) => {
       if (!this.track || this._playing) return;
+      if (this._dragState && this._dragState.activated) return; // Don't hover during drag
       const rect = this.overlayCanvas.getBoundingClientRect();
       const scaleX = this.overlayCanvas.width / rect.width;
       const scaleY = this.overlayCanvas.height / rect.height;
@@ -109,8 +244,12 @@ export class TabRenderer {
   destroy() {
     window.removeEventListener('resize', this._onResize);
     this.overlayCanvas.removeEventListener('click', this._clickListener);
+    this.overlayCanvas.removeEventListener('mousedown', this._mousedownListener);
+    document.removeEventListener('mousemove', this._mousemoveForDragListener);
+    document.removeEventListener('mouseup', this._mouseupListener);
     this.overlayCanvas.removeEventListener('mousemove', this._moveListener);
     this.overlayCanvas.removeEventListener('mouseleave', this._leaveListener);
+    this._stopAutoScroll();
     clearTimeout(this._resizeTimeout);
     this.wrap.remove();
   }
@@ -280,14 +419,51 @@ export class TabRenderer {
 
   onCanvasClick(handler) {
     this._onCanvasClickHandler = (e) => {
-      const rect = this.overlayCanvas.getBoundingClientRect();
-      const scaleX = this.overlayCanvas.width / rect.width;
-      const scaleY = this.overlayCanvas.height / rect.height;
-      const canvasX = (e.clientX - rect.left) * scaleX;
-      const canvasY = (e.clientY - rect.top) * scaleY;
+      const { canvasX, canvasY } = this._eventToCanvas(e);
       const index = this.getIndexAtPoint(canvasX, canvasY);
-      handler(index);
+      handler(index, { shiftKey: e.shiftKey });
     };
+  }
+
+  /**
+   * Register a callback for drag-to-select loop (Songsterr-style).
+   * @param {Function} handler - (startMeasureIdx, endMeasureIdx) => void
+   */
+  onDragSelect(handler) {
+    this._onDragSelectHandler = handler;
+  }
+
+  _eventToCanvas(e) {
+    const rect = this.overlayCanvas.getBoundingClientRect();
+    const scaleX = this.overlayCanvas.width / rect.width;
+    const scaleY = this.overlayCanvas.height / rect.height;
+    return {
+      canvasX: (e.clientX - rect.left) * scaleX,
+      canvasY: (e.clientY - rect.top) * scaleY,
+    };
+  }
+
+  /**
+   * Find which measure index contains a canvas point.
+   * @returns {number} measure index in track.measures, or -1
+   */
+  _getMeasureIndexAtPoint(canvasX, canvasY) {
+    if (!this.track || !this.track.measures) return -1;
+    const measures = this.track.measures;
+
+    for (let i = 0; i < measures.length; i++) {
+      const m = measures[i];
+      if (m._renderedX == null || !m._system) continue;
+      const system = m._system;
+
+      // Check Y range (system bounds)
+      if (canvasY < system.y || canvasY > system.y + system.height) continue;
+      // Check X range (measure bounds)
+      if (canvasX >= m._renderedX && canvasX < m._renderedX + m._renderedWidth) {
+        return i;
+      }
+    }
+    return -1;
   }
 
   // --- System ref caching ---
@@ -369,10 +545,13 @@ export class TabRenderer {
     const c = this._colors;
     if (!c) return;
 
-    // Only do full clear/redraw when loop markers need updating
-    // For cursor-only updates, use incremental redraw
-    if (this._needsFullOverlayRedraw) {
+    // Full redraw when loop/markers change, or when a loop region is active
+    // (incremental clearRect would erase the loop highlight underneath)
+    const hasLoopRegion = this.loopA !== null && this.loopB !== null;
+    if (this._needsFullOverlayRedraw || hasLoopRegion) {
       ctx.clearRect(0, 0, this.totalWidth, this.totalHeight);
+      this._drawLoopRegion(ctx, c);
+      this._drawDragPreview(ctx, c);
       this._drawCheckpointMarkers(ctx);
       this._drawHoverCursor(ctx, c);
       this._drawCursor(ctx, c);
@@ -526,6 +705,116 @@ export class TabRenderer {
       else ctx.fillText(note.fret, x, y);
     }
     ctx.restore();
+  }
+
+  /**
+   * Draw the filled highlight region for the active loop.
+   * Covers entire measures from loopA to loopB, spanning multiple systems if needed.
+   */
+  _drawLoopRegion(ctx, c) {
+    if (this.loopA === null || this.loopB === null) return;
+    if (!this.track || !this.track.measures) return;
+
+    const measures = this.track.measures;
+    const C = TAB_CONSTANTS;
+
+    // Find measure indices containing the loop points
+    let startMIdx = -1, endMIdx = -1;
+    for (let i = 0; i < measures.length; i++) {
+      const m = measures[i];
+      if (startMIdx < 0 && m.beatIndices.includes(this.loopA)) startMIdx = i;
+      if (m.beatIndices.includes(this.loopB)) endMIdx = i;
+    }
+    if (startMIdx < 0 || endMIdx < 0) return;
+
+    this._drawMeasureRegion(ctx, c, startMIdx, endMIdx, 0.07);
+  }
+
+  /**
+   * Draw the drag-in-progress preview highlight.
+   */
+  _drawDragPreview(ctx, c) {
+    if (!this._dragState || !this._dragState.activated) return;
+    if (!this.track || !this.track.measures) return;
+
+    const start = Math.min(this._dragState.startMeasureIdx, this._dragState.currentMeasureIdx);
+    const end = Math.max(this._dragState.startMeasureIdx, this._dragState.currentMeasureIdx);
+
+    this._drawMeasureRegion(ctx, c, start, end, 0.12);
+  }
+
+  /**
+   * Draw a highlighted region covering measures from startIdx to endIdx.
+   * Handles multi-system spans.
+   */
+  _drawMeasureRegion(ctx, c, startIdx, endIdx, alpha) {
+    if (!this.track || !this.track.measures) return;
+    const measures = this.track.measures;
+    const C = TAB_CONSTANTS;
+
+    ctx.fillStyle = c.blue;
+    ctx.globalAlpha = alpha;
+
+    // Group consecutive measures by system for efficient drawing
+    let currentSystem = null;
+    let regionX = 0;
+    let regionW = 0;
+
+    for (let i = startIdx; i <= endIdx; i++) {
+      const m = measures[i];
+      if (!m || !m._system) continue;
+
+      if (m._system !== currentSystem) {
+        // Flush previous system region
+        if (currentSystem) {
+          const top = currentSystem.y + C.marginTop - C.cursorOverhang;
+          const bottom = currentSystem.y + currentSystem.height - C.marginBottom + C.cursorOverhang;
+          ctx.fillRect(regionX, top, regionW, bottom - top);
+        }
+        currentSystem = m._system;
+        regionX = m._renderedX;
+        regionW = m._renderedWidth;
+      } else {
+        regionW = (m._renderedX + m._renderedWidth) - regionX;
+      }
+    }
+
+    // Flush last system region
+    if (currentSystem) {
+      const top = currentSystem.y + C.marginTop - C.cursorOverhang;
+      const bottom = currentSystem.y + currentSystem.height - C.marginBottom + C.cursorOverhang;
+      ctx.fillRect(regionX, top, regionW, bottom - top);
+    }
+
+    ctx.globalAlpha = 1;
+
+    // Draw boundary lines at the edges of the region
+    const startM = measures[startIdx];
+    const endM = measures[endIdx];
+    if (startM && startM._system) {
+      const sTop = startM._system.y + C.marginTop - C.cursorOverhang;
+      const sBot = startM._system.y + startM._system.height - C.marginBottom + C.cursorOverhang;
+      ctx.strokeStyle = c.blue;
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = 0.5;
+      ctx.beginPath();
+      ctx.moveTo(startM._renderedX, sTop);
+      ctx.lineTo(startM._renderedX, sBot);
+      ctx.stroke();
+    }
+    if (endM && endM._system) {
+      const eTop = endM._system.y + C.marginTop - C.cursorOverhang;
+      const eBot = endM._system.y + endM._system.height - C.marginBottom + C.cursorOverhang;
+      const endX = endM._renderedX + endM._renderedWidth;
+      ctx.strokeStyle = c.blue;
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = 0.5;
+      ctx.beginPath();
+      ctx.moveTo(endX, eTop);
+      ctx.lineTo(endX, eBot);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
   }
 
   _drawLoopMarkers(ctx, c) {

@@ -634,6 +634,44 @@ export function renderTabViewer(container) {
   }
 
   /**
+   * Remove the checkpoint nearest to the given beat index, if within tolerance.
+   * @returns {boolean} true if a checkpoint was removed
+   */
+  function _removeCheckpointAtBeat(beatIndex) {
+    if (checkpoints.length === 0 || !player.timeline) return false;
+
+    const event = player.timeline[beatIndex];
+    if (!event) return false;
+    const clickTime = event.time;
+
+    // Find the closest checkpoint by tabTime
+    let bestIdx = -1;
+    let bestDist = Infinity;
+    for (let i = 0; i < checkpoints.length; i++) {
+      const dist = Math.abs(checkpoints[i].tabTime - clickTime);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestIdx = i;
+      }
+    }
+
+    // Tolerance: must be within ~2 seconds of a checkpoint
+    if (bestIdx < 0 || bestDist > 2.0) return false;
+
+    checkpoints.splice(bestIdx, 1);
+    _saveCheckpoints();
+    _updateExternalClock();
+    _syncCheckpointMarkers();
+
+    songInfo.textContent = `Checkpoint removed (${checkpoints.length} remaining)`;
+    setTimeout(() => {
+      if (score) songInfo.textContent = `${score.title} — ${score.artist}`;
+    }, 1500);
+
+    return true;
+  }
+
+  /**
    * Update the renderer's checkpoint markers to match current checkpoints.
    * Converts tabTime values to beat indices using binary search.
    */
@@ -765,7 +803,9 @@ export function renderTabViewer(container) {
     return true; // consumed the click
   }
 
-  renderer.onCanvasClick((index) => {
+  renderer.onCanvasClick((index, { shiftKey } = {}) => {
+    // Shift+click: remove nearest checkpoint
+    if (shiftKey && youtubeVoiceActive && _removeCheckpointAtBeat(index)) return;
     if (_handleCheckpointClick(index)) return;
     transport.actions.handleCanvasClick(index);
   });
@@ -805,6 +845,11 @@ export function renderTabViewer(container) {
           e.preventDefault();
           toggleFretboard();
         }
+        break;
+      case 'KeyL':
+        // L: Clear loop
+        e.preventDefault();
+        transport.actions.clearLoop();
         break;
       case 'KeyC':
         if (youtubeVoiceActive && e.shiftKey) {

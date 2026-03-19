@@ -27,32 +27,33 @@ export function createTransport(deps) {
     value: savedTempo,
     valueText: savedTempo + '%',
   });
-  
+
   // Apply saved tempo on creation
   player.setTempoScale(savedTempo / 100);
 
   // --- Loop controls ---
-  const loopABtn = buildButton('A', 'caged-btn', { title: 'Set loop start', disabled: true });
-  const loopBBtn = buildButton('B', 'caged-btn', { title: 'Set loop end', disabled: true });
+  const loopLabel = document.createElement('span');
+  loopLabel.className = 'caged-label';
+  loopLabel.textContent = 'Loop:';
+
+  const loopStatus = document.createElement('span');
+  loopStatus.className = 'loop-status';
+  loopStatus.textContent = 'Off';
+
   const loopClearBtn = buildButton('\u2715', 'caged-btn', { title: 'Clear loop', disabled: true });
 
   const loopWrap = document.createElement('div');
   loopWrap.className = 'tab-loop-controls';
-  const loopLabel = document.createElement('span');
-  loopLabel.className = 'caged-label';
-  loopLabel.textContent = 'Loop:';
   loopWrap.appendChild(loopLabel);
-  loopWrap.appendChild(loopABtn);
-  loopWrap.appendChild(loopBBtn);
+  loopWrap.appendChild(loopStatus);
   loopWrap.appendChild(loopClearBtn);
 
   // --- Metronome toggle ---
   const metroBtn = buildButton('\u23F1', 'caged-btn', { title: 'Toggle Metronome', disabled: true });
 
   // --- State ---
-  let loopA = null;
-  let loopB = null;
-  let settingLoop = null;
+  let loopStartMeasure = null;
+  let loopEndMeasure = null;
 
   // --- Actions ---
 
@@ -67,7 +68,9 @@ export function createTransport(deps) {
       player.resume();
       playBtn.textContent = '\u23F8 Pause';
     } else {
-      player.play(player.currentIndex);
+      // Start from loop start if a loop is active, otherwise from current position
+      const startIdx = player.loopA !== null ? player.loopA : player.currentIndex;
+      player.play(startIdx);
       playBtn.textContent = '\u23F8 Pause';
     }
   }
@@ -88,49 +91,69 @@ export function createTransport(deps) {
   }
 
   function clearLoop() {
-    loopA = null;
-    loopB = null;
-    settingLoop = null;
-    loopABtn.classList.remove('active');
-    loopBBtn.classList.remove('active');
+    loopStartMeasure = null;
+    loopEndMeasure = null;
+    loopStatus.textContent = 'Off';
     player.setLoop(null, null);
     renderer.setLoop(null, null);
   }
 
+  /**
+   * Set loop by measure range (from drag-to-select).
+   * @param {number} startMeasureIdx - index in track.measures
+   * @param {number} endMeasureIdx - index in track.measures
+   */
+  function setLoopByMeasures(startMeasureIdx, endMeasureIdx) {
+    const trackData = getTrackData();
+    if (!trackData) return;
+
+    const measures = trackData.measures;
+    if (!measures || startMeasureIdx < 0 || endMeasureIdx >= measures.length) return;
+
+    const startMeasure = measures[startMeasureIdx];
+    const endMeasure = measures[endMeasureIdx];
+    if (!startMeasure || !endMeasure) return;
+
+    // First beat of start measure, last beat of end measure
+    const loopA = startMeasure.beatIndices[0];
+    const loopB = endMeasure.beatIndices[endMeasure.beatIndices.length - 1];
+
+    loopStartMeasure = startMeasureIdx;
+    loopEndMeasure = endMeasureIdx;
+
+    // Update status display
+    if (startMeasureIdx === endMeasureIdx) {
+      loopStatus.textContent = `Bar ${startMeasure.masterBarIndex + 1}`;
+    } else {
+      loopStatus.textContent = `Bar ${startMeasure.masterBarIndex + 1}–${endMeasure.masterBarIndex + 1}`;
+    }
+
+    player.setLoop(loopA, loopB);
+    renderer.setLoop(loopA, loopB);
+
+    // Seek to loop start so cursor shows the selection
+    if (player.state !== 'playing') {
+      player.seekTo(loopA);
+      renderer.setCursor(loopA);
+    }
+  }
+
   function handleCanvasClick(index) {
-    if (settingLoop === 'a') {
-      loopA = index;
-      loopABtn.classList.remove('active');
-      settingLoop = null;
-      if (loopB !== null) {
-        player.setLoop(loopA, loopB);
-        renderer.setLoop(loopA, loopB);
-      }
-    } else if (settingLoop === 'b') {
-      loopB = index;
-      loopBBtn.classList.remove('active');
-      settingLoop = null;
-      if (loopA !== null) {
-        player.setLoop(loopA, loopB);
-        renderer.setLoop(loopA, loopB);
-      }
-    } else if (player.state !== 'playing') {
+    if (player.state !== 'playing') {
       player.seekTo(index);
       renderer.setCursor(index);
     }
   }
 
   function resetLoopState() {
-    loopA = null;
-    loopB = null;
-    settingLoop = null;
+    loopStartMeasure = null;
+    loopEndMeasure = null;
+    loopStatus.textContent = 'Off';
   }
 
   function enableControls() {
     playBtn.disabled = false;
     stopBtn.disabled = false;
-    loopABtn.disabled = false;
-    loopBBtn.disabled = false;
     loopClearBtn.disabled = false;
     metroBtn.disabled = false;
   }
@@ -151,24 +174,17 @@ export function createTransport(deps) {
     settings.set('tempo', pct);
   });
 
-  loopABtn.addEventListener('click', () => {
-    settingLoop = 'a';
-    loopABtn.classList.add('active');
-    loopBBtn.classList.remove('active');
-  });
-
-  loopBBtn.addEventListener('click', () => {
-    settingLoop = 'b';
-    loopBBtn.classList.add('active');
-    loopABtn.classList.remove('active');
-  });
-
   loopClearBtn.addEventListener('click', clearLoop);
 
   metroBtn.addEventListener('click', () => {
     const enabled = !player.metronomeEnabled;
     player.setMetronomeEnabled(enabled);
     metroBtn.classList.toggle('active', enabled);
+  });
+
+  // --- Wire up drag-to-select on renderer ---
+  renderer.onDragSelect((startMeasureIdx, endMeasureIdx) => {
+    setLoopByMeasures(startMeasureIdx, endMeasureIdx);
   });
 
   return {
@@ -181,6 +197,8 @@ export function createTransport(deps) {
       resetLoopState,
       enableControls,
       onPlaybackStopped,
+      clearLoop,
+      setLoopByMeasures,
     },
     SEEK_STEP,
   };

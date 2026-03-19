@@ -767,15 +767,17 @@ export class TabPlayer {
         const loopStart = this.loopA !== null ? this.loopA : 0;
         primary.currentIndex = loopStart;
 
+        const restartTime = primary.timeline[loopStart].time;
         for (let i = 0; i < this.tracks.length; i++) {
           if (i === this.primaryIndex) continue;
-          const restartTime = primary.timeline[loopStart].time;
           this.tracks[i].currentIndex = this._findIndexAtTime(this.tracks[i].timeline, restartTime);
         }
-        this._syncMetronome(primary.timeline[loopStart].time);
+        this._syncMetronome(restartTime);
 
-        // Notify external audio to seek back to loop start
-        if (this._onSeek) this._onSeek(primary.timeline[loopStart].time);
+        // Use onPlay (not onSeek) to ensure YouTube seeks AND resumes playback.
+        // onSeek alone doesn't call .play(), which can cause YouTube to stall
+        // at the loop point if the audio element needs re-engagement.
+        if (this._onPlay) this._onPlay(restartTime);
         break;
       }
     }

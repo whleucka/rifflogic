@@ -1,4 +1,7 @@
-/* Chord diagram */
+/* ========================================
+   Chord Diagram (SVG)
+   ======================================== */
+
 .chord-diagram-svg {
   display: block;
 }
@@ -66,7 +69,10 @@
   fill: var(--accent-green);
 }
 
-/* Chord selector group */
+/* ========================================
+   Chord Selector Group
+   ======================================== */
+
 .chord-selector-group {
   flex: 1 1 100%;
   max-width: 700px;
@@ -74,17 +80,17 @@
 
 .chord-selector-row {
   display: flex;
-  gap: 0.5rem;
+  gap: var(--space-sm);
   align-items: center;
   flex-wrap: wrap;
-  margin-bottom: 0.75rem;
+  margin-bottom: var(--space-md);
 }
 
 .chord-bottom-row {
   display: flex;
   align-items: center;
-  gap: 1rem;
-  margin-top: 0.5rem;
+  gap: var(--space-lg);
+  margin-top: var(--space-sm);
 }
 
 .chord-diagram-container {
@@ -95,17 +101,20 @@
 .chord-voicing-nav {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--space-sm);
 }
 
 .chord-nav-label {
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
   color: var(--text-muted);
   min-width: 3rem;
   text-align: center;
 }
 
-/* Chord practice group */
+/* ========================================
+   Chord Practice Group
+   ======================================== */
+
 .chord-practice-group {
   flex: 1 1 100%;
   max-width: 700px;
@@ -113,30 +122,29 @@
 
 .practice-settings-row {
   display: flex;
-  gap: 0.5rem;
+  gap: var(--space-sm);
   align-items: center;
   flex-wrap: wrap;
-  margin-bottom: 0.75rem;
+  margin-bottom: var(--space-md);
 }
 
 .bpm-control {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: var(--space-xs);
 }
 
 .bpm-control label {
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
   color: var(--text-secondary);
 }
 
 .bpm-control input[type="range"] {
   width: 80px;
-  accent-color: var(--accent-blue);
 }
 
 .bpm-value {
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
   color: var(--accent-gold);
   font-weight: 600;
   min-width: 2rem;
@@ -152,22 +160,25 @@
   min-width: 3.5rem;
 }
 
-/* Progression display */
+/* ========================================
+   Progression Display
+   ======================================== */
+
 .progression-display {
   display: flex;
-  gap: 0.5rem;
+  gap: var(--space-sm);
   flex-wrap: wrap;
-  margin-bottom: 0.5rem;
+  margin-bottom: var(--space-sm);
   min-height: 2rem;
   align-items: center;
 }
 
 .progression-chord {
-  padding: 0.35rem 0.75rem;
+  padding: 0.35rem var(--space-md);
   border-radius: var(--radius);
   background: var(--bg-surface);
   color: var(--text-secondary);
-  font-size: 0.9rem;
+  font-size: var(--text-md);
   font-weight: 600;
   border: 1px solid var(--border-color);
   transition: all var(--transition);
@@ -178,6 +189,7 @@
   color: var(--note-text);
   border-color: var(--accent-blue);
   transform: scale(1.1);
+  box-shadow: 0 0 10px var(--accent-blue-dim);
 }
 
 .progression-chord.next {
@@ -185,10 +197,13 @@
   color: var(--accent-gold);
 }
 
-/* Beat indicator */
+/* ========================================
+   Beat Indicator
+   ======================================== */
+
 .beat-display {
   display: flex;
-  gap: 0.4rem;
+  gap: var(--space-xs);
   min-height: 1.5rem;
   align-items: center;
 }
@@ -205,10 +220,13 @@
 .beat-dot.active {
   background: var(--accent-gold);
   border-color: var(--accent-gold);
-  box-shadow: 0 0 6px var(--accent-gold);
+  box-shadow: 0 0 8px var(--accent-gold-dim);
 }
 
-/* Responsive */
+/* ========================================
+   Responsive
+   ======================================== */
+
 @media (max-width: 768px) {
   .chord-selector-group,
   .chord-practice-group {
@@ -221,6 +239,6 @@
   }
 
   .practice-settings-row {
-    gap: 0.4rem;
+    gap: var(--space-xs);
   }
 }

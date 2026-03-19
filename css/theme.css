@@ -4,6 +4,7 @@
   --bg-secondary: #1f2335;
   --bg-surface: #292e42;
   --bg-surface-alt: rgba(41, 46, 66, 0.4);
+  --bg-hover: rgba(255, 255, 255, 0.04);
 
   /* Text */
   --text-primary: #c0caf5;
@@ -12,10 +13,14 @@
 
   /* Accents — Tokyo Night palette */
   --accent-blue: #7aa2f7;
+  --accent-blue-dim: rgba(122, 162, 247, 0.15);
   --accent-red: #f7768e;
+  --accent-red-dim: rgba(247, 118, 142, 0.15);
   --accent-gold: #e0af68;
   --accent-gold-muted: rgba(224, 175, 104, 0.3);
+  --accent-gold-dim: rgba(224, 175, 104, 0.15);
   --accent-green: #9ece6a;
+  --accent-green-dim: rgba(158, 206, 106, 0.15);
 
   /* Fretboard */
   --fb-body: #1a1b26;
@@ -33,14 +38,35 @@
 
   /* UI */
   --border-color: rgba(169, 177, 214, 0.1);
+  --border-hover: rgba(169, 177, 214, 0.2);
   --shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.5);
   --radius: 6px;
+  --radius-lg: 10px;
   --transition: 0.15s ease;
+
+  /* Spacing scale */
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 0.75rem;
+  --space-lg: 1rem;
+  --space-xl: 1.5rem;
+
+  /* Typography scale */
+  --text-xs: 0.75rem;
+  --text-sm: 0.8rem;
+  --text-base: 0.85rem;
+  --text-md: 0.95rem;
+  --text-lg: 1.1rem;
+  --text-xl: 1.75rem;
 
   /* Font */
   --font-main: 'Inter', 'Segoe UI', system-ui, sans-serif;
   --font-title: 'Righteous', sans-serif;
   --font-mono: 'Fira Code', 'Consolas', monospace;
+
+  /* Focus ring */
+  --focus-ring: 0 0 0 2px var(--bg-primary), 0 0 0 4px var(--accent-blue);
 }
 
 body {
