@@ -493,8 +493,9 @@ function _drawChordTie(ctx, c, event, x, staffY, stringCount, beatIdx, measure, 
 
   for (const tieNote of tieNotes) {
     const noteY = staffY + (stringCount - 1 - tieNote.string) * C.lineSpacing;
-    const arcY = noteY + C.hopoArcOffsetY;
-    const arcH = C.hopoArcHeight;
+    // Tie arcs drawn below the note (positive arcH = downward)
+    const arcY = noteY - C.hopoArcOffsetY;
+    const arcH = -C.hopoArcHeight * 0.7;
 
     // Find the next beat that has the tie destination on the same string
     let nextX = null;
@@ -554,10 +555,12 @@ function _drawConnector(ctx, c, note, x, y, staffY, stringCount, beatIdx, event,
         ctx.strokeStyle = note.tieOrigin ? c.muted : c.section;
         ctx.lineWidth = 1;
         const midX = (x + nextX) / 2;
+        // Ties arc below the note, HOPOs arc above
+        const arcOffsetY = note.tieOrigin ? -C.hopoArcOffsetY : C.hopoArcOffsetY;
         const arcH = note.tieOrigin ? -C.hopoArcHeight * 0.7 : C.hopoArcHeight;
         ctx.beginPath();
-        ctx.moveTo(x + C.hopoInset, y + C.hopoArcOffsetY);
-        ctx.quadraticCurveTo(midX, y + arcH, nextX - C.hopoInset, nextY + C.hopoArcOffsetY);
+        ctx.moveTo(x + C.hopoInset, y + arcOffsetY);
+        ctx.quadraticCurveTo(midX, y + arcH, nextX - C.hopoInset, nextY + arcOffsetY);
         ctx.stroke();
       } else if (note.slide) {
         // Diagonal line angled by pitch direction (same string = same y, so use fret to determine angle)
@@ -579,11 +582,12 @@ function _drawConnector(ctx, c, note, x, y, staffY, stringCount, beatIdx, event,
       ctx.strokeStyle = note.tieOrigin ? c.muted : c.section;
       ctx.lineWidth = 1;
       const midX = (x + exitX) / 2;
+      const arcOffsetY = note.tieOrigin ? -C.hopoArcOffsetY : C.hopoArcOffsetY;
       const arcH = note.tieOrigin ? -C.hopoArcHeight * 0.7 : C.hopoArcHeight;
 
       ctx.beginPath();
-      ctx.moveTo(x + C.hopoInset, y + C.hopoArcOffsetY);
-      ctx.quadraticCurveTo(midX, y + arcH, exitX, y + (C.hopoArcOffsetY / 2));
+      ctx.moveTo(x + C.hopoInset, y + arcOffsetY);
+      ctx.quadraticCurveTo(midX, y + arcH, exitX, y + (arcOffsetY / 2));
       ctx.stroke();
     }
   }
