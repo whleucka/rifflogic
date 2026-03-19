@@ -1,6 +1,6 @@
 # RiffLogic
+<img width="1190" height="1060" alt="image" src="https://github.com/user-attachments/assets/cb43216a-9b5b-4707-bc7c-b64c36eda7fe" />
 
-<img width="1190" height="1060" alt="image" src="https://github.com/user-attachments/assets/827f0468-2e68-4244-ba17-8ad27e3be07a" />
 
 > Work in progress
 
