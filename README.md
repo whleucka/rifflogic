@@ -1,5 +1,7 @@
 # RiffLogic
 
+<img width="956" height="1164" alt="image" src="https://github.com/user-attachments/assets/e79cc4f4-6daf-4d02-9126-11a9a25c7ade" />
+
 > Work in progress
 
 Guitar practice tool. Scales, chords, and a Guitar Pro tab viewer with multi-track playback.
